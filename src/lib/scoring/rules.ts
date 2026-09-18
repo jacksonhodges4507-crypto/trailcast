@@ -321,9 +321,17 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
   let reason: string;
   if (snowIn > 6) reason = `${snowIn.toFixed(0)}" of snow on the ground; expect postholing`;
   else if (snowIn > 1) reason = `${snowIn.toFixed(1)}" of lingering snow on a ${trail.aspect}-facing route`;
-  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)}" of rain in 72 h on ${trail.surface} — likely muddy${activity === "mtb" ? "; riding it causes ruts" : ""}`;
+  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)}" of rain in 72 h on ${trail.surface} — likely muddy`;
   else if (wetness > 0.2) reason = `Some moisture from ${(prior ?? 0).toFixed(2)}" of recent rain; tacky in places`;
   else reason = `Dry and firm ${trail.surface}`;
+
+  // The riding penalty above fires at wetness > 0.25, so the explanation has
+  // to fire at the same threshold. A score that moves without a reason that
+  // moves with it is how a user stops trusting the number.
+  const rutNote =
+    activity === "mtb" && wetness > 0.25 && snowIn <= 1
+      ? " Riding it wet will cut ruts that last a season."
+      : "";
 
   const waterNote =
     trail.waterCrossings > 0 && (prior ?? 0) > 0.5
@@ -335,7 +343,7 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
     label: "Trail surface",
     score,
     weight: 0,
-    reason: reason + waterNote,
+    reason: reason + rutNote + waterNote,
     sources: collect(conditions, ["precipitationPrior72hIn", "snowDepthIn"]),
   };
 };
