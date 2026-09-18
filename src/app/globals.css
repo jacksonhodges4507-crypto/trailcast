@@ -628,9 +628,19 @@ button {
 
 /* ------------------------------------------------------------------- map -- */
 
-.map {
+/*
+ * MapLibre's stylesheet is injected at runtime, after this one, and its
+ * `.maplibregl-map { position: relative }` rule carries the same specificity
+ * as a bare `.map`. Later wins, so the container lost its absolute
+ * positioning, collapsed to zero height, and the map rendered into nothing
+ * while the canvas element sat there looking perfectly healthy.
+ * Scoping to the parent outranks it.
+ */
+.canvas > .map {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .map-fallback {

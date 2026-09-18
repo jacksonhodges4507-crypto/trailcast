@@ -12,7 +12,7 @@ independent sources, scores each trail against **its own terrain** and against
 **the activity you are doing**, and shows you exactly which number produced the
 verdict and where that number came from.
 
-**[Live demo](https://trailcast.vercel.app)** · no sign-up, no API key required.
+**[Live demo](https://trailcast-sigma.vercel.app)** · no sign-up, no API key required.
 
 ---
 

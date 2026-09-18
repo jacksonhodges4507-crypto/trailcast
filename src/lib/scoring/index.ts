@@ -138,7 +138,13 @@ export function buildHeadline(grade: Grade, factors: Factor[], score?: number): 
   // merely the highest-scoring one. Daylight scores 100 on almost every
   // summer trail, so ranking by raw score gave every prime trail the same
   // uninformative headline.
-  const best = scored
+  // The absence of a hazard is not news. A perfect wildfire score means no
+  // fires nearby, which was leading half the headlines with "no active fire
+  // perimeters nearby" while saying nothing about the actual day.
+  const newsworthy = scored.filter((f) => !(f.id === "wildfire" && f.score === 100));
+  const candidates = newsworthy.length > 0 ? newsworthy : scored;
+
+  const best = candidates
     .map((f) => ({ factor: f, contribution: (f.score / 100) * f.weight }))
     .sort((a, b) => b.contribution - a.contribution)[0];
 

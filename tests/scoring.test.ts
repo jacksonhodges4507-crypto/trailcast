@@ -243,3 +243,30 @@ describe("compareVerdicts", () => {
     expect(sorted[2]?.trailId).toBe("c");
   });
 });
+
+describe("headline selection", () => {
+  it("does not lead with the absence of a hazard", () => {
+    // Every factor is excellent, including wildfire at a perfect 100.
+    const verdict = scoreTrail(trail(), goodConditions(), "hike");
+    expect(verdict.grade).toBe("prime");
+    expect(verdict.headline).not.toContain("no active fire perimeters");
+  });
+
+  it("still reports a fire when there is one", () => {
+    const conditions = goodConditions({
+      wildfires: [{ name: "Bald Mountain", distanceMi: 3.2, acres: 900 }],
+    });
+    const verdict = scoreTrail(trail(), conditions, "hike");
+    expect(verdict.grade).toBe("unsafe");
+    expect(verdict.headline).toContain("Bald Mountain");
+  });
+
+  it("leads a poor day with whatever dragged it down", () => {
+    const verdict = scoreTrail(
+      trail(),
+      goodConditions({ tempMaxF: 103, usAqi: 30 }),
+      "hike",
+    );
+    expect(verdict.headline.toLowerCase()).toContain("heat");
+  });
+});
