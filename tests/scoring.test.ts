@@ -374,3 +374,25 @@ describe("activity temperature bands", () => {
     expect(climbing.score).toBe(100);
   });
 });
+
+describe("imported climbing areas", () => {
+  it("marks inferred rock types in the reason so the UI can disclose them", () => {
+    const factor = rockRule({
+      trail: trail({ rockType: "sandstone", rockTypeSource: "inferred" }),
+      conditions: goodConditions({ hoursSincePrecip: 200 }),
+      activity: "climb",
+    });
+    expect(factor.reason).toContain("inferred");
+  });
+
+  it("still fires the sandstone veto on an inferred rock type", () => {
+    // The conservative error on the Colorado Plateau is telling someone to
+    // wait, so uncertainty must not quietly disable the safety rule.
+    const factor = rockRule({
+      trail: trail({ rockType: "sandstone", rockTypeSource: "inferred" }),
+      conditions: goodConditions({ hoursSincePrecip: 6 }),
+      activity: "climb",
+    });
+    expect(factor.veto).toBe(true);
+  });
+});

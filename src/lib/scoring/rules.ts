@@ -459,12 +459,18 @@ export const rockRule: Rule = ({ trail, conditions }) => {
     reason = `${Math.round(since)} h since rain; ${spec.label} should be dry`;
   }
 
+  // Say so when the rock type is a regional inference rather than a verified
+  // fact. The veto still fires -- on the Colorado Plateau the conservative
+  // error is telling someone to wait -- but the user should know which it is.
+  const inferred =
+    trail.rockTypeSource === "inferred" ? " (rock type inferred from the region)" : "";
+
   return {
     id: "rock",
     label: "Rock condition",
     score,
     weight: 0,
-    reason,
+    reason: reason + inferred,
     veto,
     sources: collect(conditions, ["hoursSincePrecip", "precipitationPrior72hIn"]),
   };

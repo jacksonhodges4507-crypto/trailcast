@@ -100,6 +100,17 @@ export interface Trail {
   waterCrossings: number;
   /** Set for climbing areas; drives the rock-condition rule. */
   rockType?: RockType;
+  /**
+   * Whether `rockType` was verified against a guidebook or geological source,
+   * or inferred from the surrounding region. Inferred values still score, but
+   * the UI says so rather than implying a certainty we do not have.
+   */
+  rockTypeSource?: "curated" | "inferred";
+  /** Route count, where the source dataset provides one. Used for prominence. */
+  routes?: number;
+  /** Attribution for imported areas. */
+  sourceName?: string;
+  sourceUrl?: string;
   blurb: string;
 }
 
@@ -193,6 +204,9 @@ export interface ConditionsResponse {
   sourceStatus: SourceStatus[];
   /** True when at least one source failed and results are partial. */
   degraded: boolean;
+  /** How many areas were scored, and how many matched before the cap. */
+  scored: number;
+  available: number;
 }
 
 export interface AskQuery {

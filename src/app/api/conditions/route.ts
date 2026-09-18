@@ -39,6 +39,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       reports: built.reports,
       sourceStatus: built.sourceStatus,
       degraded: built.degraded,
+      scored: built.scored,
+      available: built.available,
     };
 
     return NextResponse.json(body, {

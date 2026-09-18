@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { bboxAround, gridCentre, gridKey, haversineMi } from "@/lib/geo";
+import { selectCandidates } from "@/lib/report";
+import { trail } from "./fixtures";
+import type { Trail } from "@/lib/types";
+
+const trailAt = (id: string, lat: number, lon: number): Trail => trail({ id, lat, lon });
 
 describe("haversineMi", () => {
   it("measures a known city pair to within a few miles", () => {
@@ -58,5 +63,26 @@ describe("bboxAround", () => {
   it("widens longitude more than latitude away from the equator", () => {
     const box = bboxAround({ lat: 60, lon: 0 }, 35);
     expect(box.maxLon - box.minLon).toBeGreaterThan(box.maxLat - box.minLat);
+  });
+});
+
+describe("selectCandidates", () => {
+  const near = trailAt("near", 40.6, -111.6);
+  const mid = trailAt("mid", 40.9, -111.9);
+  const far = trailAt("far", 38.5, -109.5);
+
+  it("returns everything when under the cap", () => {
+    expect(selectCandidates([near, far], 5).map((t) => t.id)).toEqual(["near", "far"]);
+  });
+
+  it("keeps the nearest areas when an origin is given", () => {
+    const picked = selectCandidates([far, mid, near], 2, { lat: 40.62, lon: -111.62 });
+    expect(picked.map((t) => t.id)).toEqual(["near", "mid"]);
+  });
+
+  it("falls back to the most substantial areas with no origin", () => {
+    const big = { ...trailAt("big", 39, -111), routes: 400 };
+    const small = { ...trailAt("small", 39, -111), routes: 8 };
+    expect(selectCandidates([small, big], 1).map((t) => t.id)).toEqual(["big"]);
   });
 });

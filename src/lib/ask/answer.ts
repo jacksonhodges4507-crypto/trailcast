@@ -136,6 +136,7 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
     date: query.date,
     activity: query.activity,
     trails: candidates,
+    origin: query.origin,
     signal: options.signal,
   });
 

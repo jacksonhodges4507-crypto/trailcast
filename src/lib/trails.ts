@@ -1,4 +1,5 @@
 import type { Trail } from "./types";
+import { OPENBETA_AREAS } from "./data/climbingAreas";
 
 /**
  * Seed dataset.
@@ -10,7 +11,7 @@ import type { Trail } from "./types";
  * cannot, and they are exactly the fields a real deployment would move into
  * PostGIS and source from OSM plus land-manager data.
  */
-export const TRAILS: Trail[] = [
+const CURATED_TRAILS: Trail[] = [
   {
     id: "timpanogos-timpooneke",
     name: "Mount Timpanogos (Timpooneke)",
@@ -537,6 +538,13 @@ export const TRAILS: Trail[] = [
     blurb: "Remote quartzite bouldering on a dry lakebed. Bone dry almost always, and no shade whatsoever.",
   },
 ];
+
+/**
+ * Hand-curated areas carry verified terrain attributes; imported ones bring
+ * breadth. Curated entries come first so that where the two overlap, the
+ * better-attributed record is the one a proximity or prominence cap keeps.
+ */
+export const TRAILS: Trail[] = [...CURATED_TRAILS, ...OPENBETA_AREAS];
 
 export const TRAILS_BY_ID: Record<string, Trail> = Object.fromEntries(
   TRAILS.map((t) => [t.id, t]),

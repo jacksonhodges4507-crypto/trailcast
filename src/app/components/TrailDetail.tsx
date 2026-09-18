@@ -29,7 +29,10 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
           <div className="card-region">
             {trail.region}, {trail.state} · {trail.distanceMi} mi ·{" "}
             {trail.gainFt.toLocaleString()} ft gain
-            {trail.rockType ? ` · ${trail.rockType}` : ""}
+            {trail.rockType
+              ? ` · ${trail.rockType}${trail.rockTypeSource === "inferred" ? "*" : ""}`
+              : ""}
+            {trail.routes ? ` · ${trail.routes} routes` : ""}
           </div>
         </div>
         <button className="detail-close" onClick={onClose} aria-label="Close details">
@@ -137,12 +140,28 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
           )}
         </div>
 
+        {trail.sourceName ? (
+          <div className="sources">
+            <h3>Area data</h3>
+            <div className="source-item">
+              <a href={trail.sourceUrl} target="_blank" rel="noreferrer noopener">
+                {trail.sourceName}
+              </a>
+              {trail.rockTypeSource === "inferred"
+                ? " · * rock type inferred from the surrounding region, not verified"
+                : ""}
+            </div>
+          </div>
+        ) : null}
+
         <div className="sources">
           <h3>Terrain inputs</h3>
           <div className="source-item">
             surface={trail.surface} · aspect={trail.aspect} ·{" "}
             exposed={String(trail.exposed)}
-            {trail.rockType ? ` · rock=${trail.rockType}` : ""}
+            {trail.rockType
+              ? ` · rock=${trail.rockType} (${trail.rockTypeSource ?? "curated"})`
+              : ""}
             {trail.waterCrossings > 0 ? ` · crossings=${trail.waterCrossings}` : ""}
           </div>
         </div>

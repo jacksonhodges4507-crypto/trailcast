@@ -30,6 +30,8 @@ export default async function Page() {
       reports: built.reports,
       sourceStatus: built.sourceStatus,
       degraded: built.degraded,
+      scored: built.scored,
+      available: built.available,
     };
   } catch {
     // Never let an upstream outage produce a blank page: hand the client an
@@ -41,6 +43,8 @@ export default async function Page() {
       reports: [],
       sourceStatus: [],
       degraded: true,
+      scored: 0,
+      available: 0,
     };
   }
 

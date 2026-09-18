@@ -108,6 +108,11 @@ export default function Dashboard({ initial, today }: DashboardProps) {
           </span>
         </div>
         <div className="masthead-right">
+          {data.available > data.scored ? (
+            <span className="chip" title={`${data.available} areas match this activity; the nearest or largest ${data.scored} are scored per request to stay a polite client of the upstream APIs.`}>
+              scoring {data.scored} of {data.available}
+            </span>
+          ) : null}
           <SourceChips status={data.sourceStatus} degraded={data.degraded} />
         </div>
       </header>
