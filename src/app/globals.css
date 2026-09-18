@@ -125,18 +125,213 @@ button {
   min-height: 420px;
 }
 
+/* ---------------------------------------------------------------- mobile --
+
+   Two things were wrong on a phone. The map sat below the whole list, so
+   reaching it meant scrolling past forty cards; and the detail panel was a
+   352px floating box positioned against a viewport narrower than itself.
+
+   On small screens the map comes first at a readable height, and the detail
+   panel becomes a bottom sheet -- the pattern every native map app uses,
+   because it keeps the map visible while you read about a pin.
+-------------------------------------------------------------------------- */
+
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 1fr;
   }
+
   .rail {
     max-height: none;
     border-right: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Map above the list, tall enough to actually read. */
+  .canvas {
+    order: -1;
+    height: 46vh;
+    min-height: 260px;
     border-bottom: 1px solid var(--border);
   }
-  .canvas {
-    height: 380px;
+
+  .masthead {
+    padding: 11px 16px;
+    gap: 8px;
   }
+
+  .brand h1 {
+    font-size: 17px;
+  }
+
+  /* The tagline is charm, not information; the chips are diagnostics. */
+  .brand .tagline {
+    display: none;
+  }
+
+  .statusbar {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .chip {
+    padding: 2px 7px;
+  }
+
+  /* Source chips show name + timing; on a phone the dot alone carries it. */
+  .chip > span:last-child {
+    display: none;
+  }
+
+  /* Four activities will not fit as a row of labelled buttons at 360px. */
+  .segmented {
+    gap: 2px;
+  }
+
+  .segmented button {
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 2px;
+    font-size: 11px;
+    line-height: 1.25;
+    min-height: 46px;
+  }
+
+  .controls,
+  .ask {
+    padding: 12px 14px;
+  }
+
+  .dayscroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .dayscroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dayscroll button {
+    min-width: 58px;
+    min-height: 44px;
+  }
+
+  .ask input {
+    /* 16px keeps iOS from zooming the viewport on focus. */
+    font-size: 16px;
+    padding: 11px 12px;
+  }
+
+  .ask button {
+    min-height: 44px;
+  }
+
+  .ask-suggestions button {
+    font-size: 12px;
+    padding: 6px 11px;
+  }
+
+  .list {
+    padding: 10px 12px 32px;
+  }
+
+  .card {
+    padding: 13px;
+  }
+
+  /* Detail becomes a bottom sheet so the map stays visible behind it. */
+  .detail {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    max-width: none;
+    max-height: 72vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55);
+    z-index: 40;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: sheet-up 0.22s ease-out;
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(16px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* A grab handle, so it reads as a sheet rather than a stuck panel. */
+  .detail::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    margin: 9px auto 0;
+  }
+
+  .detail-head {
+    padding: 10px 16px 12px;
+    position: sticky;
+    top: 0;
+    background: var(--bg-elevated);
+    z-index: 1;
+  }
+
+  .detail-close {
+    font-size: 24px;
+    padding: 4px 8px;
+    margin: -4px -4px 0 0;
+  }
+
+  .legend {
+    left: 8px;
+    bottom: 8px;
+    gap: 8px;
+    padding: 7px 9px;
+    font-size: 9.5px;
+    max-width: calc(100% - 16px);
+  }
+
+  .marker {
+    width: 30px;
+    height: 30px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand h1 {
+    font-size: 16px;
+  }
+
+  .segmented button {
+    font-size: 10px;
+  }
+
+  /* Below this width the per-source chips crowd out the title. */
+  .statusbar .chip {
+    padding: 2px 6px;
+  }
+
+  .legend span:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+/* Nothing should ever scroll sideways. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* --------------------------------------------------------------- controls -- */
