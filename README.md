@@ -138,12 +138,22 @@ Climbers also get their own temperature band. Friction falls off with heat, so
 
 ---
 
-## Performance note
+## Bounding the work
 
-Trailheads are clustered onto a ~17 × 13 mile grid before fetching, so a canyon
-with six trailheads costs one upstream request per source rather than six. With
-the current dataset that is **3 requests instead of 54**, before caching.
-→ [`geo.ts`](src/lib/geo.ts)
+Two mechanisms keep a bigger catalogue from turning into a bigger bill for
+somebody else's free API.
+
+**Grid clustering.** Areas are collapsed onto a ~17 × 13 mile grid before
+fetching, so a canyon with six crags costs one upstream request per source
+rather than six. → [`geo.ts`](src/lib/geo.ts)
+
+**A hard cap.** Importing a real climbing dataset took the catalogue from 18
+hand-written entries to 76 areas, which unbounded would have fanned out into
+hundreds of calls per page load. A request scores at most 40 areas — the
+nearest when an origin is named, the largest otherwise — fetches at most 8
+cells at a time, and returns `scored` and `available` so the UI can say
+"scoring 40 of 73" rather than silently truncating.
+→ [`report.ts`](src/lib/report.ts)
 
 ---
 
@@ -156,10 +166,20 @@ the current dataset that is **3 requests instead of 54**, before caching.
 | [NIFC WFIGS](https://data-nifc.opendata.arcgis.com/) | active wildfire perimeters within 35 mi | no |
 | [OpenFreeMap](https://openfreemap.org/) | basemap tiles | no |
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
+| [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported, not live) | no |
 
-Trail attributes (soil, aspect, exposure, stream crossings) are hand-curated
-seed data in [`trails.ts`](src/lib/trails.ts). In a production build these move
-to PostGIS, sourced from OpenStreetMap plus land-manager data.
+Climbing areas are imported from [OpenBeta](https://openbeta.io), an open
+climbing database, by walking its public GraphQL API. **Mountain Project is
+deliberately not used**: its public data API was retired and its terms do not
+permit scraping, and a portfolio project is a poor place to launder a terms
+violation.
+
+Trail attributes (soil, aspect, exposure, stream crossings) are hand-curated in
+[`trails.ts`](src/lib/trails.ts). Imported areas carry a `rockTypeSource` of
+`curated` or `inferred`, so the panel can say which rock types were verified
+and which were guessed from the surrounding region. Inferred types still fire
+the sandstone veto, because on the Colorado Plateau the conservative error is
+telling someone to wait. In production this moves to PostGIS.
 
 ---
 
