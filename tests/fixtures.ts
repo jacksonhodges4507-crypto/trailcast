@@ -16,6 +16,7 @@ const ALL_FIELDS = [
   "precipitationIn",
   "precipitationChancePct",
   "precipitationPrior72hIn",
+  "hoursSincePrecip",
   "windMph",
   "windGustMph",
   "snowDepthIn",

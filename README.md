@@ -20,8 +20,8 @@ verdict and where that number came from.
 
 | | |
 |---|---|
-| **Ingests** | weather + 72-hour precipitation history, air quality, active wildfire perimeters |
-| **Joins against** | a curated trail dataset with soil type, aspect, exposure and stream crossings |
+| **Ingests** | weather + 72-hour precipitation history, hours since last rain, air quality, active wildfire perimeters |
+| **Joins against** | a curated trail dataset with soil type, rock type, aspect, exposure and stream crossings |
 | **Scores** | seven weighted factors, re-weighted per activity (hiking, trail running, mountain biking, climbing) |
 | **Explains** | a plain-English reason per factor, a headline, and a source link with a fetch timestamp for every value |
 | **Answers** | natural-language questions — *"where should I ride Saturday near Park City?"* |
@@ -104,6 +104,37 @@ and told not to add any. **The model explains a decision; it never makes one.**
 That is why the scoring engine is deterministic, why the ask feature is fully
 unit-testable without a network call, and why the demo works with no key at
 all. → [`ask/`](src/lib/ask)
+
+---
+
+## The climbing case
+
+The clearest example of why per-trail attributes beat a forecast.
+
+Western sandstone **loses up to 75% of its strength while wet**. Climbing
+Wingate or Navajo within a day or two of rain snaps holds and permanently
+destroys routes — the Access Fund's guidance is 24–48 hours minimum, longer
+when it is cool or shaded. Granite in Little Cottonwood, by contrast, is fine
+within a few hours.
+
+So the engine tracks *hours since the last measurable hour of rain*, not just
+how much fell, and pairs it with each crag's rock type and aspect:
+
+| Rock | Hard veto | Fully dry |
+|---|---|---|
+| Sandstone (Indian Creek, Moab, Zion, Joe's Valley) | 48 h | 96 h |
+| Conglomerate (Maple Canyon) | 18 h | 48 h |
+| Limestone (American Fork, Logan, VRG) | 8 h | 30 h |
+| Quartzite (Big Cottonwood, Ogden, Rock Canyon) | 6 h | 24 h |
+| Granite (Little Cottonwood) | 4 h | 16 h |
+
+North-facing and shaded crags get those windows multiplied. The result: 24
+hours after a storm, Indian Creek is a hard *no-go* and Gate Buttress is
+*prime* — same weather, same day, opposite answers. A forecast cannot tell you
+that; it needs to know what the rock is made of.
+
+Climbers also get their own temperature band. Friction falls off with heat, so
+66 °F is a perfect hiking day and an already-warm climbing one.
 
 ---
 

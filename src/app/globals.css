@@ -493,8 +493,45 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.meter {
+/*
+ * Two bars per factor, because they answer two different questions: how good
+ * is this today, and how much does it count. Showing both as bare numbers on
+ * one line read as a single confusing statistic.
+ */
+.factors-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  padding-bottom: 11px;
+  margin-bottom: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.factors-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.key-swatch {
+  width: 14px;
   height: 5px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.key-condition {
+  background: var(--accent);
+}
+
+.key-weight {
+  background: var(--text-faint);
+  height: 3px;
+}
+
+.meter {
   background: var(--border);
   border-radius: 999px;
   overflow: hidden;
@@ -504,6 +541,20 @@ button {
   display: block;
   height: 100%;
   border-radius: 999px;
+}
+
+.meter-condition {
+  height: 5px;
+}
+
+.meter-weight {
+  height: 3px;
+  margin-top: 3px;
+  opacity: 0.75;
+}
+
+.meter-weight > span {
+  background: var(--text-faint);
 }
 
 .factor-reason {

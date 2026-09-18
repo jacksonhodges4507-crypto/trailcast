@@ -259,6 +259,26 @@ export const openMeteoAdapter: SourceAdapter = {
         if (sawAny) {
           set(date, "precipitationPrior72hIn", total, "hourly.precipitation (prior 72h)");
         }
+
+        // Hours since the last measurable hour of precipitation, looking back
+        // up to 96 h. Rock dries as a function of elapsed time, not total
+        // volume: a tenth of an inch yesterday matters more to a sandstone
+        // crag than an inch four days ago.
+        const lookbackStart = midnight - 96 * 3_600_000;
+        let lastWet = -Infinity;
+        for (const entry of hourlyPrecipByTs) {
+          if (entry.ts >= lookbackStart && entry.ts < midnight && entry.inches >= 0.01) {
+            lastWet = Math.max(lastWet, entry.ts);
+          }
+        }
+        if (Number.isFinite(lastWet)) {
+          set(
+            date,
+            "hoursSincePrecip",
+            (midnight - lastWet) / 3_600_000,
+            "hourly.precipitation (hours since last wet hour)",
+          );
+        }
       }
     }
 

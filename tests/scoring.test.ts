@@ -3,11 +3,13 @@ import { scoreTrail, compareVerdicts, gradeFor, estimateHours } from "@/lib/scor
 import {
   airQualityRule,
   precipitationRule,
+  rockRule,
   surfaceRule,
   temperatureRule,
   windRule,
 } from "@/lib/scoring/rules";
 import { goodConditions, trail } from "./fixtures";
+import type { Trail } from "@/lib/types";
 
 describe("scoreTrail on a clear autumn day", () => {
   const verdict = scoreTrail(trail(), goodConditions(), "hike");
@@ -268,5 +270,107 @@ describe("headline selection", () => {
       "hike",
     );
     expect(verdict.headline.toLowerCase()).toContain("heat");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rock condition (climbing)
+// ---------------------------------------------------------------------------
+
+describe("rock rule", () => {
+  const crag = (rockType: Trail["rockType"], extra: Partial<Trail> = {}): Trail =>
+    trail({ rockType, surface: "rock", aspect: "S", exposed: true, ...extra });
+
+  it("vetoes sandstone within the Access Fund's 48-hour window", () => {
+    const factor = rockRule({
+      trail: crag("sandstone"),
+      conditions: goodConditions({ hoursSincePrecip: 12 }),
+      activity: "climb",
+    });
+    expect(factor.veto).toBe(true);
+    expect(factor.reason).toContain("75%");
+  });
+
+  it("clears granite at the same 12 hours", () => {
+    const factor = rockRule({
+      trail: crag("granite"),
+      conditions: goodConditions({ hoursSincePrecip: 12 }),
+      activity: "climb",
+    });
+    expect(factor.veto).toBeFalsy();
+    expect(factor.score ?? 0).toBeGreaterThan(50);
+  });
+
+  it("makes rock type decide the verdict, not the weather alone", () => {
+    const conditions = goodConditions({ hoursSincePrecip: 24 });
+    const sandstone = scoreTrail(crag("sandstone"), conditions, "climb");
+    const granite = scoreTrail(crag("granite"), conditions, "climb");
+
+    expect(sandstone.grade).toBe("unsafe");
+    expect(granite.grade).not.toBe("unsafe");
+  });
+
+  it("gives shaded north-facing rock longer to dry", () => {
+    const conditions = goodConditions({ hoursSincePrecip: 10 });
+    const sunny = rockRule({
+      trail: crag("limestone", { aspect: "S", exposed: true }),
+      conditions,
+      activity: "climb",
+    });
+    const shaded = rockRule({
+      trail: crag("limestone", { aspect: "N", exposed: false }),
+      conditions,
+      activity: "climb",
+    });
+
+    expect(sunny.veto).toBeFalsy();
+    expect(shaded.veto).toBe(true);
+  });
+
+  it("treats a long dry spell as good news, not missing data", () => {
+    const factor = rockRule({
+      trail: crag("sandstone"),
+      conditions: goodConditions({ hoursSincePrecip: undefined }),
+      activity: "climb",
+    });
+    expect(factor.score).toBe(100);
+    expect(factor.missingReason).toBeUndefined();
+  });
+
+  it("ends the question when rain is forecast for the day itself", () => {
+    const factor = rockRule({
+      trail: crag("sandstone"),
+      conditions: goodConditions({ precipitationIn: 0.2, hoursSincePrecip: 200 }),
+      activity: "climb",
+    });
+    expect(factor.score).toBe(0);
+    expect(factor.veto).toBe(true);
+  });
+
+  it("reports no data for an area with no rock type recorded", () => {
+    const factor = rockRule({
+      trail: trail({ rockType: undefined }),
+      conditions: goodConditions(),
+      activity: "climb",
+    });
+    expect(factor.score).toBeUndefined();
+    expect(factor.missingReason).toBeTruthy();
+  });
+});
+
+describe("activity temperature bands", () => {
+  it("counts 66 F as perfect for hiking and already warm for climbing", () => {
+    const conditions = goodConditions({ tempMaxF: 66 });
+    const hiking = temperatureRule({ trail: trail(), conditions, activity: "hike" });
+    const climbing = temperatureRule({ trail: trail(), conditions, activity: "climb" });
+
+    expect(hiking.score).toBe(100);
+    expect(climbing.score ?? 100).toBeLessThan(90);
+  });
+
+  it("counts a cold 40 F day as prime for climbing friction", () => {
+    const conditions = goodConditions({ tempMaxF: 40 });
+    const climbing = temperatureRule({ trail: trail(), conditions, activity: "climb" });
+    expect(climbing.score).toBe(100);
   });
 });

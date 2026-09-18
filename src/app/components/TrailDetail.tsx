@@ -1,6 +1,7 @@
 "use client";
 
 import type { TrailReport } from "@/lib/types";
+import { ACTIVITIES } from "@/lib/activities";
 import { GRADE_CLASS, GRADE_COLOR, GRADE_TEXT, scoreColor } from "./grade";
 
 export interface TrailDetailProps {
@@ -9,12 +10,16 @@ export interface TrailDetailProps {
 }
 
 /**
- * The detail panel is where the product earns trust: every factor shows its
- * score, the weight it carried for this activity, the sentence explaining it,
- * and a link to the upstream request it came from.
+ * The detail panel is where the product earns trust.
+ *
+ * Each factor carries two different quantities, and an earlier version showed
+ * them as bare numbers side by side ("82 · 16%"), which read as one confusing
+ * statistic. They are now two separate labelled bars: how good the factor is
+ * today, and how much it counts toward this activity's score.
  */
 export default function TrailDetail({ report, onClose }: TrailDetailProps) {
   const { trail, verdict, conditions } = report;
+  const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
 
   return (
     <aside className="detail">
@@ -24,6 +29,7 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
           <div className="card-region">
             {trail.region}, {trail.state} · {trail.distanceMi} mi ·{" "}
             {trail.gainFt.toLocaleString()} ft gain
+            {trail.rockType ? ` · ${trail.rockType}` : ""}
           </div>
         </div>
         <button className="detail-close" onClick={onClose} aria-label="Close details">
@@ -36,13 +42,25 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
 
         <div
           className="card-headline"
-          style={{ marginBottom: 16, color: GRADE_COLOR[verdict.grade] }}
+          style={{ marginBottom: 14, color: GRADE_COLOR[verdict.grade] }}
         >
           {verdict.headline}
         </div>
 
+        <div className="factors-key">
+          <span>
+            <i className="key-swatch key-condition" /> condition today
+          </span>
+          <span>
+            <i className="key-swatch key-weight" /> share of the {activityLabel} score
+          </span>
+        </div>
+
         {verdict.factors.map((factor) => {
-          const pct = factor.score ?? 0;
+          const weightPct = Math.round(factor.weight * 100);
+          const hasScore = factor.score !== undefined;
+          const scorePct = hasScore ? Math.round(factor.score as number) : 0;
+
           return (
             <div className="factor" key={factor.id}>
               <div className="factor-head">
@@ -51,23 +69,33 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
                   {factor.veto ? <span className="veto-flag">veto</span> : null}
                 </span>
                 <span className="factor-score">
-                  {factor.score !== undefined ? `${Math.round(factor.score)}` : "—"}
-                  <span className="factor-weight">
-                    {" "}
-                    · {Math.round(factor.weight * 100)}%
-                  </span>
+                  {hasScore ? `${scorePct}%` : "no data"}
                 </span>
               </div>
 
-              <div className="meter">
+              <div
+                className="meter meter-condition"
+                title={
+                  hasScore
+                    ? `Condition today: ${scorePct} out of 100`
+                    : "No data for this factor"
+                }
+              >
                 <span
                   style={{
-                    width: `${factor.score !== undefined ? pct : 0}%`,
+                    width: `${hasScore ? scorePct : 0}%`,
                     background: factor.veto
                       ? GRADE_COLOR.unsafe
                       : scoreColor(factor.score, verdict.grade),
                   }}
                 />
+              </div>
+
+              <div
+                className="meter meter-weight"
+                title={`Counts for ${weightPct}% of the ${activityLabel} score`}
+              >
+                <span style={{ width: `${weightPct}%` }} />
               </div>
 
               <p className={factor.missingReason ? "factor-missing" : "factor-reason"}>
@@ -90,9 +118,7 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         ) : null}
 
         <div className="sources">
-          <h3>
-            Sources · confidence {Math.round(verdict.confidence * 100)}%
-          </h3>
+          <h3>Sources · confidence {Math.round(verdict.confidence * 100)}%</h3>
           {verdict.sources.length === 0 ? (
             <div className="source-item">No sources responded for this trail.</div>
           ) : (
@@ -115,14 +141,16 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
           <h3>Terrain inputs</h3>
           <div className="source-item">
             surface={trail.surface} · aspect={trail.aspect} ·{" "}
-            exposed={String(trail.exposed)} · crossings={trail.waterCrossings}
+            exposed={String(trail.exposed)}
+            {trail.rockType ? ` · rock=${trail.rockType}` : ""}
+            {trail.waterCrossings > 0 ? ` · crossings=${trail.waterCrossings}` : ""}
           </div>
         </div>
 
         <div style={{ marginTop: 14 }}>
           <span className={`score-grade ${GRADE_CLASS[verdict.grade]}`}>
             {GRADE_TEXT[verdict.grade]}
-            {verdict.score !== undefined ? ` · ${verdict.score}/100` : ""}
+            {verdict.score !== undefined ? ` · ${verdict.score}%` : ""}
           </span>
         </div>
       </div>

@@ -27,7 +27,21 @@ export type FactorId =
   | "air_quality"
   | "daylight"
   | "surface"
+  | "rock"
   | "wildfire";
+
+/**
+ * Rock type governs how long a crag needs after rain before it is safe — and
+ * in the case of desert sandstone, before climbing it stops destroying the
+ * route. Western sandstone can lose up to 75% of its strength while wet.
+ */
+export type RockType =
+  | "granite"
+  | "quartzite"
+  | "limestone"
+  | "conglomerate"
+  | "sandstone"
+  | "basalt";
 
 /** A single provenance record: one field, from one source, at one time. */
 export interface SourceRef {
@@ -84,6 +98,8 @@ export interface Trail {
   exposed: boolean;
   /** Unbridged stream crossings along the route. */
   waterCrossings: number;
+  /** Set for climbing areas; drives the rock-condition rule. */
+  rockType?: RockType;
   blurb: string;
 }
 
@@ -101,6 +117,12 @@ export interface Conditions {
   precipitationChancePct?: number;
   /** Total precipitation over the 72 hours before this date. */
   precipitationPrior72hIn?: number;
+  /**
+   * Hours since the last measurable precipitation, looking back up to 96 h.
+   * Undefined when it has not rained in that window — which is good news, not
+   * missing data, so rules treat it as "long dry".
+   */
+  hoursSincePrecip?: number;
   windMph?: number;
   windGustMph?: number;
   snowDepthIn?: number;

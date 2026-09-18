@@ -54,11 +54,33 @@ const round = (n: number) => Math.round(n);
 // ---------------------------------------------------------------------------
 
 /**
+ * Comfortable temperature band per activity, in F.
+ *
+ * Climbers are the outlier: friction falls off sharply with heat, so a 75 F
+ * day that a hiker calls pleasant is a greasy, unsendable day on rock. The
+ * cold end runs lower for the same reason.
+ */
+const COMFORT_BAND: Record<ActivityId, [number, number]> = {
+  hike: [40, 68],
+  trail_run: [35, 62],
+  mtb: [40, 72],
+  climb: [32, 60],
+};
+
+/** How steeply each activity degrades above its band. */
+const HEAT_SLOPE: Record<ActivityId, number> = {
+  hike: 3.2,
+  trail_run: 3.8,
+  mtb: 3.0,
+  climb: 3.6,
+};
+
+/**
  * Comfort is not symmetric: most people tolerate 40 F far better than 95 F,
  * and an unshaded trail runs materially hotter than the air temperature the
  * model reports. We add a radiant-load bump on exposed routes above 70 F.
  */
-export const temperatureRule: Rule = ({ trail, conditions }) => {
+export const temperatureRule: Rule = ({ trail, conditions, activity }) => {
   const high = conditions.tempMaxF;
   if (high === undefined) {
     return missing("temperature", "Temperature", "No temperature forecast available");
@@ -67,10 +89,12 @@ export const temperatureRule: Rule = ({ trail, conditions }) => {
   const radiantBump = trail.exposed && high > 70 ? 6 : 0;
   const felt = high + radiantBump;
 
+  const [lo, hi] = COMFORT_BAND[activity];
+
   let score: number;
-  if (felt >= 40 && felt <= 68) score = 100;
-  else if (felt > 68) score = clamp(100 - (felt - 68) * 3.2);
-  else score = clamp(100 - (40 - felt) * 2.2);
+  if (felt >= lo && felt <= hi) score = 100;
+  else if (felt > hi) score = clamp(100 - (felt - hi) * HEAT_SLOPE[activity]);
+  else score = clamp(100 - (lo - felt) * 2.2);
 
   const low = conditions.tempMinF;
   const range =
@@ -350,6 +374,103 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
 };
 
 // ---------------------------------------------------------------------------
+// Rock condition (climbing only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hours a rock type needs after measurable rain before it is worth climbing.
+ *
+ * `veto` is the hard floor. For desert sandstone this is not a comfort
+ * threshold but an ethics and safety one: western sandstone can lose up to
+ * 75% of its strength while saturated, so climbing it wet snaps holds and
+ * permanently destroys routes. The Access Fund's guidance is 24-48 hours
+ * minimum, longer when it is cool or humid, which is why the veto sits at 48
+ * and the score does not reach full until 96.
+ */
+const ROCK_DRYING: Record<
+  NonNullable<Trail["rockType"]>,
+  { veto: number; good: number; label: string }
+> = {
+  sandstone: { veto: 48, good: 96, label: "sandstone" },
+  conglomerate: { veto: 18, good: 48, label: "conglomerate" },
+  limestone: { veto: 8, good: 30, label: "limestone" },
+  quartzite: { veto: 6, good: 24, label: "quartzite" },
+  basalt: { veto: 4, good: 18, label: "basalt" },
+  granite: { veto: 4, good: 16, label: "granite" },
+};
+
+/** North-facing and shaded rock sheds water far more slowly. */
+function dryingPenalty(trail: Trail): number {
+  const slowAspect = trail.aspect === "N" || trail.aspect === "NE" || trail.aspect === "NW";
+  const shade = trail.exposed ? 1 : 1.25;
+  return (slowAspect ? 1.3 : 1) * shade;
+}
+
+export const rockRule: Rule = ({ trail, conditions }) => {
+  const rock = trail.rockType;
+  if (!rock) {
+    return missing("rock", "Rock condition", "No rock type recorded for this area");
+  }
+
+  const spec = ROCK_DRYING[rock];
+  const factor = dryingPenalty(trail);
+  const vetoHours = spec.veto * factor;
+  const goodHours = spec.good * factor;
+
+  const since = conditions.hoursSincePrecip;
+  const todayRain = conditions.precipitationIn ?? 0;
+
+  // Rain forecast for the day itself ends the question.
+  if (todayRain >= 0.05) {
+    return {
+      id: "rock",
+      label: "Rock condition",
+      score: 0,
+      weight: 0,
+      reason: `Rain forecast today — ${spec.label} will be wet${rock === "sandstone" ? "; climbing saturated sandstone breaks holds" : ""}`,
+      veto: rock === "sandstone",
+      sources: collect(conditions, ["precipitationIn", "hoursSincePrecip"]),
+    };
+  }
+
+  if (since === undefined) {
+    // No wet hour in the 96-hour lookback: the rock is as dry as it gets.
+    return {
+      id: "rock",
+      label: "Rock condition",
+      score: 100,
+      weight: 0,
+      reason: `Dry ${spec.label}; no rain in at least four days`,
+      sources: collect(conditions, ["precipitationPrior72hIn", "hoursSincePrecip"]),
+    };
+  }
+
+  const score = between(since, vetoHours * 0.5, goodHours, 0, 100);
+  const veto = since < vetoHours;
+
+  let reason: string;
+  if (veto && rock === "sandstone") {
+    reason = `Only ${Math.round(since)} h since rain. Wet sandstone loses up to 75% of its strength — climbing it now snaps holds and destroys routes. Wait ${Math.round(vetoHours - since)} h more.`;
+  } else if (veto) {
+    reason = `Only ${Math.round(since)} h since rain; ${spec.label} will still be damp or seeping`;
+  } else if (score < 70) {
+    reason = `${Math.round(since)} h since rain — ${spec.label} is drying but may still be greasy in shaded corners`;
+  } else {
+    reason = `${Math.round(since)} h since rain; ${spec.label} should be dry`;
+  }
+
+  return {
+    id: "rock",
+    label: "Rock condition",
+    score,
+    weight: 0,
+    reason,
+    veto,
+    sources: collect(conditions, ["hoursSincePrecip", "precipitationPrior72hIn"]),
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Wildfire
 // ---------------------------------------------------------------------------
 
@@ -402,5 +523,6 @@ export const RULES: Record<FactorId, Rule> = {
   air_quality: airQualityRule,
   daylight: daylightRule,
   surface: surfaceRule,
+  rock: rockRule,
   wildfire: wildfireRule,
 };
