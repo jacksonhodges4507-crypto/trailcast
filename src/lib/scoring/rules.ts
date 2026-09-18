@@ -73,7 +73,8 @@ export const temperatureRule: Rule = ({ trail, conditions }) => {
   else score = clamp(100 - (40 - felt) * 2.2);
 
   const low = conditions.tempMinF;
-  const range = low !== undefined ? `${round(low)}-${round(high)} F` : `${round(high)} F`;
+  const range =
+    low !== undefined ? `${round(low)}–${round(high)} °F` : `${round(high)} °F`;
 
   let reason: string;
   if (felt > 92) reason = `Dangerous heat at ${range}${trail.exposed ? " with no shade" : ""}`;

@@ -133,17 +133,36 @@ export function buildHeadline(grade: Grade, factors: Factor[], score?: number): 
     .sort((a, b) => b.drag - a.drag);
 
   const worst = drags[0];
-  const best = scored.slice().sort((a, b) => b.score - a.score)[0];
+
+  // Lead a good day with the factor contributing most to the verdict, not
+  // merely the highest-scoring one. Daylight scores 100 on almost every
+  // summer trail, so ranking by raw score gave every prime trail the same
+  // uninformative headline.
+  const best = scored
+    .map((f) => ({ factor: f, contribution: (f.score / 100) * f.weight }))
+    .sort((a, b) => b.contribution - a.contribution)[0];
 
   if (grade === "prime" && best) {
-    return `${label} — ${best.reason.toLowerCase()}`;
+    return `${label} — ${lowerFirst(best.factor.reason)}`;
   }
 
   if (worst && worst.drag > 4) {
-    return `${label} — ${worst.factor.reason.toLowerCase()}`;
+    return `${label} — ${lowerFirst(worst.factor.reason)}`;
   }
 
   return `${label} — nothing standing out against it`;
+}
+
+/**
+ * Lowercase the first character so a reason can be spliced mid-sentence,
+ * unless the leading word is an abbreviation or a figure — "AQI 142" must not
+ * become "aQI 142", and "12.3 h of daylight" should be left alone.
+ */
+export function lowerFirst(text: string): string {
+  const first = text.split(/\s+/)[0] ?? "";
+  if (/^[A-Z]{2,}/.test(first)) return text;
+  if (/^[\d\u2013-]/.test(first)) return text;
+  return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 /** Sort helper: best first, with vetoed trails always last. */

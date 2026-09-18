@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { coerceQuery, parseQuery } from "@/lib/ask/parse";
-import { templateNarrative } from "@/lib/ask/answer";
-import { scoreTrail } from "@/lib/scoring";
+import {
+  DEFAULT_NEARBY_RADIUS_MI,
+  radiusFor,
+  rankByProximity,
+  templateNarrative,
+} from "@/lib/ask/answer";
+import { lowerFirst, scoreTrail } from "@/lib/scoring";
 import { goodConditions, trail } from "./fixtures";
-import type { TrailReport } from "@/lib/types";
+import type { Grade, TrailReport } from "@/lib/types";
 
 // 2026-09-17 is a Thursday.
 const TODAY = "2026-09-17";
@@ -119,5 +124,102 @@ describe("templateNarrative", () => {
     ];
     const narrative = templateNarrative(query, reports, TODAY);
     expect(narrative.toLowerCase()).toContain("nothing looks safe");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Proximity handling
+// ---------------------------------------------------------------------------
+
+function fakeReport(
+  id: string,
+  name: string,
+  lat: number,
+  lon: number,
+  score: number,
+  grade: Grade = "prime",
+): TrailReport {
+  const t = trail({ id, name, lat, lon });
+  const conditions = goodConditions();
+  return {
+    trail: t,
+    conditions,
+    verdict: {
+      trailId: id,
+      activity: "mtb",
+      date: conditions.date,
+      score,
+      grade,
+      headline: `${grade} test headline`,
+      factors: [],
+      sources: [],
+      confidence: 1,
+    },
+  };
+}
+
+const PARK_CITY = { lat: 40.6461, lon: -111.498, label: "Park City" };
+
+describe("radiusFor", () => {
+  it("honours an explicit radius", () => {
+    const query = { ...parseQuery("riding within 20 miles of provo", TODAY) };
+    expect(radiusFor(query)).toBe(20);
+  });
+
+  it("applies a default radius when a place is named without one", () => {
+    const query = parseQuery("where should I ride near park city", TODAY);
+    expect(query.origin).toBeDefined();
+    expect(radiusFor(query)).toBe(DEFAULT_NEARBY_RADIUS_MI);
+  });
+
+  it("applies no radius when no place is named", () => {
+    expect(radiusFor(parseQuery("where should I ride saturday", TODAY))).toBeUndefined();
+  });
+});
+
+describe("rankByProximity", () => {
+  it("prefers the closer trail when conditions are effectively tied", () => {
+    const far = fakeReport("far", "Far Trail", 40.7686, -111.8226, 95);
+    const near = fakeReport("near", "Near Trail", 40.66, -111.59, 94);
+
+    const ranked = rankByProximity([far, near], PARK_CITY);
+    expect(ranked[0]?.trail.name).toBe("Near Trail");
+  });
+
+  it("does not let proximity override a real difference in conditions", () => {
+    const far = fakeReport("far", "Far Trail", 40.7686, -111.8226, 95);
+    const near = fakeReport("near", "Near Trail", 40.66, -111.59, 70);
+
+    const ranked = rankByProximity([far, near], PARK_CITY);
+    expect(ranked[0]?.trail.name).toBe("Far Trail");
+  });
+
+  it("keeps a no-go last however close it is", () => {
+    const closeButUnsafe = fakeReport("x", "Close No-Go", 40.646, -111.499, 96, "unsafe");
+    const fine = fakeReport("y", "Fine Trail", 40.7686, -111.8226, 80);
+
+    const ranked = rankByProximity([closeButUnsafe, fine], PARK_CITY);
+    expect(ranked[0]?.trail.name).toBe("Fine Trail");
+    expect(ranked[1]?.trail.name).toBe("Close No-Go");
+  });
+
+  it("leaves order alone when no origin was given", () => {
+    const a = fakeReport("a", "A", 40.1, -111.1, 90);
+    const b = fakeReport("b", "B", 41.9, -112.9, 91);
+    expect(rankByProximity([a, b], undefined).map((r) => r.trail.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("narrative polish", () => {
+  it("states the distance from the named origin", () => {
+    const query = parseQuery("where should I ride near park city", TODAY);
+    const reports = [fakeReport("a", "Crest Trail", 40.66, -111.59, 92)];
+    expect(templateNarrative(query, reports, TODAY)).toMatch(/\d+ mi from Park City/);
+  });
+
+  it("does not mangle an abbreviation when splicing a reason mid-sentence", () => {
+    expect(lowerFirst("AQI 142 is unhealthy")).toBe("AQI 142 is unhealthy");
+    expect(lowerFirst("Dry and firm dirt")).toBe("dry and firm dirt");
+    expect(lowerFirst("12.3 h of daylight")).toBe("12.3 h of daylight");
   });
 });

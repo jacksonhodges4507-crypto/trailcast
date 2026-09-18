@@ -12,7 +12,7 @@ independent sources, scores each trail against **its own terrain** and against
 **the activity you are doing**, and shows you exactly which number produced the
 verdict and where that number came from.
 
-<!-- LIVE_DEMO -->
+**[Live demo](https://trailcast.vercel.app)** · no sign-up, no API key required.
 
 ---
 
@@ -142,6 +142,11 @@ curl "$HOST/api/health"
 
 `/api/conditions` returns a scored report per trail with full factor
 breakdowns, source provenance and per-source health.
+
+`/api/ask` resolves a question to a structured query. Naming a place without
+a radius implies a 50-mile search, and near-ties on conditions are broken by
+distance from that origin — a trail eight miles out and one point worse is the
+better answer to "near Park City" than one thirty miles away.
 
 ---
 
