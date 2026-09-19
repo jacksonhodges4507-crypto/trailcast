@@ -1,30 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TrailReport } from "@/lib/types";
 import { GRADE_COLOR } from "./grade";
 
 /**
- * MapLibre is loaded from a CDN at runtime rather than bundled.
+ * MapLibre is loaded from a CDN at runtime rather than bundled: it is a
+ * ~900 kB dependency used by one component, and the list view -- the part
+ * that must work -- should not wait for it.
  *
- * It is a ~900 kB dependency used by exactly one component, and loading it
- * lazily keeps it off the critical path for the list view — which is the part
- * of the page that actually has to work. If the CDN or the tile host is
- * unreachable the component degrades to a message and the rest of the app is
- * unaffected.
+ * Everything else here exists because a third-party tile service will fail
+ * eventually. It already has: the style JSON parsed, the canvas sized
+ * correctly, and the map then sat at a blank white rectangle without ever
+ * firing `load` or `error`. Silence is the worst failure mode, so the map now
+ * gives itself a deadline and says so when it misses it.
  */
 
 const MAPLIBRE_JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css";
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
-/** The slice of the MapLibre API this component actually uses. */
+/** How long the basemap gets before we call it a failure. */
+const LOAD_DEADLINE_MS = 9000;
+
 interface MapLibreMap {
   addControl(control: unknown, position?: string): void;
   fitBounds(bounds: [[number, number], [number, number]], options?: unknown): void;
   flyTo(options: unknown): void;
+  resize(): void;
   remove(): void;
-  on(event: string, handler: () => void): void;
+  loaded(): boolean;
+  on(event: string, handler: (payload?: unknown) => void): void;
 }
 
 interface MapLibreMarker {
@@ -67,9 +73,9 @@ function loadMapLibre(): Promise<MapLibreNamespace> {
     script.async = true;
     script.onload = () => {
       if (window.maplibregl) resolve(window.maplibregl);
-      else reject(new Error("MapLibre loaded but did not register"));
+      else reject(new Error("the map library loaded but did not register"));
     };
-    script.onerror = () => reject(new Error("Could not load the map library"));
+    script.onerror = () => reject(new Error("could not reach the map library"));
     document.head.appendChild(script);
   });
 
@@ -86,21 +92,29 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, { marker: MapLibreMarker; el: HTMLElement }>>(new Map());
-  const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
 
-  // Keep the latest click handler without re-creating markers on every render.
+  const [ready, setReady] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
+  const retry = useCallback(() => {
+    setFailure(null);
+    setReady(false);
+    setAttempt((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
 
     loadMapLibre()
       .then((maplibregl) => {
-        if (cancelled || !containerRef.current || mapRef.current) return;
+        if (cancelled || !containerRef.current) return;
 
         const map = new maplibregl.Map({
           container: containerRef.current,
@@ -111,26 +125,65 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
         });
 
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
         map.on("load", () => {
-          if (!cancelled) setReady(true);
+          if (cancelled) return;
+          clearTimeout(deadline);
+          setReady(true);
         });
+
+        map.on("error", (payload?: unknown) => {
+          // A single tile 404 is not worth a banner; only report if the map
+          // never became usable.
+          if (cancelled || mapRef.current?.loaded()) return;
+          const message =
+            payload && typeof payload === "object" && "error" in payload
+              ? String((payload as { error?: { message?: string } }).error?.message ?? "")
+              : "";
+          if (message) console.warn("[trailcast] map error:", message);
+        });
+
+        // The deadline is the important part: the observed failure produced
+        // no error event at all, just a blank rectangle forever.
+        deadline = setTimeout(() => {
+          if (cancelled || map.loaded()) return;
+          setFailure("The basemap did not finish loading.");
+        }, LOAD_DEADLINE_MS);
 
         mapRef.current = map;
       })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setFailure(error instanceof Error ? error.message : "The map could not start.");
       });
 
     return () => {
       cancelled = true;
+      clearTimeout(deadline);
       for (const { marker } of markersRef.current.values()) marker.remove();
       markersRef.current.clear();
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [attempt]);
 
-  // Rebuild markers whenever the scored set changes.
+  /*
+   * Keep the canvas in step with its container. The panel opening and closing
+   * changes the map's width without changing the window's, and MapLibre only
+   * watches the window -- so without this the canvas keeps its old width and
+   * the map stops short of the space it has.
+   */
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.resize();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [ready]);
+
   useEffect(() => {
     const map = mapRef.current;
     const maplibregl = typeof window !== "undefined" ? window.maplibregl : undefined;
@@ -181,7 +234,6 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
     }
   }, [reports, ready]);
 
-  // Selection is a class toggle plus a fly-to, not a marker rebuild.
   useEffect(() => {
     for (const [id, { el }] of markersRef.current.entries()) {
       el.classList.toggle("marker-selected", id === selectedId);
@@ -189,24 +241,33 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
     if (!selectedId) return;
     const target = reports.find((r) => r.trail.id === selectedId);
-    if (target && mapRef.current) {
+    if (target && mapRef.current && ready) {
       mapRef.current.flyTo({
         center: [target.trail.lon, target.trail.lat],
         zoom: 11,
         duration: 700,
       });
     }
-  }, [selectedId, reports]);
+  }, [selectedId, reports, ready]);
 
-  if (failed) {
+  if (failure) {
     return (
       <div className="map-fallback">
-        The map could not load, so the list is showing instead.
-        <br />
-        Every score and source is still available on the left.
+        <p>{failure}</p>
+        <p className="map-fallback-note">
+          Every score, reason and source is still on the left — the map is the
+          only thing missing.
+        </p>
+        <button type="button" onClick={retry}>
+          Try again
+        </button>
       </div>
     );
   }
 
-  return <div className="map" ref={containerRef} />;
+  return (
+    <div className="map" ref={containerRef}>
+      {!ready ? <div className="map-loading">Loading basemap…</div> : null}
+    </div>
+  );
 }

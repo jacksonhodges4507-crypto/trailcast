@@ -119,7 +119,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
       {error ? <div className="banner">{error}</div> : null}
 
-      <div className="workspace">
+      <div className={`workspace${selected ? " has-detail" : ""}`}>
         <div className="rail">
           <div className="controls">
             <div className="segmented" role="group" aria-label="Activity">
@@ -224,29 +224,36 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
           <div className="legend">
             <span>
-              <span className="dot" style={{ background: "#34d399" }} /> prime
+              <span className="dot" style={{ background: "#2e8b57" }} /> prime
             </span>
             <span>
-              <span className="dot" style={{ background: "#a3e635" }} /> good
+              <span className="dot" style={{ background: "#5e8c3a" }} /> good
             </span>
             <span>
-              <span className="dot" style={{ background: "#fbbf24" }} /> marginal
+              <span className="dot" style={{ background: "#c08a1e" }} /> marginal
             </span>
             <span>
-              <span className="dot" style={{ background: "#fb923c" }} /> poor
+              <span className="dot" style={{ background: "#bf6b2e" }} /> poor
             </span>
             <span>
-              <span className="dot" style={{ background: "#f43f5e" }} /> no-go
+              <span className="dot" style={{ background: "#a8402c" }} /> no-go
             </span>
             <span style={{ opacity: 0.7 }}>
               {relativeLabel(date, today)} · {ACTIVITIES[activity].label.toLowerCase()}
             </span>
           </div>
 
-          {selected ? (
-            <TrailDetail report={selected} onClose={() => setSelectedId(null)} />
-          ) : null}
         </div>
+
+        {/*
+          The detail panel is a column of its own rather than a box floating
+          over the map. Overlaying it hid the part of the map nearest the pin
+          you had just clicked; as a column, the map keeps every pixel it is
+          given and simply narrows, then widens again on close.
+        */}
+        {selected ? (
+          <TrailDetail report={selected} onClose={() => setSelectedId(null)} />
+        ) : null}
       </div>
     </div>
   );

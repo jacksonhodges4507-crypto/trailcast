@@ -1,11 +1,11 @@
 import type { Grade } from "@/lib/types";
 
 export const GRADE_COLOR: Record<Grade, string> = {
-  prime: "#34d399",
-  good: "#a3e635",
-  marginal: "#fbbf24",
-  poor: "#fb923c",
-  unsafe: "#f43f5e",
+  prime: "#2e8b57",
+  good: "#5e8c3a",
+  marginal: "#c08a1e",
+  poor: "#bf6b2e",
+  unsafe: "#a8402c",
 };
 
 export const GRADE_CLASS: Record<Grade, string> = {
@@ -51,11 +51,11 @@ export function ratingFor(score: number): Rating {
 }
 
 export const RATING_COLOR: Record<Rating, string> = {
-  excellent: "#34d399",
-  good: "#a3e635",
-  fair: "#fbbf24",
-  poor: "#fb923c",
-  critical: "#f43f5e",
+  excellent: "#2e8b57",
+  good: "#5e8c3a",
+  fair: "#c08a1e",
+  poor: "#bf6b2e",
+  critical: "#a8402c",
 };
 
 /** Filled segments out of five. */

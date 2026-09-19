@@ -1,34 +1,43 @@
 /* ---------------------------------------------------------------------------
    TrailCast design tokens.
-   One scale for colour, space and type; every component reads from it.
+
+   The palette is drawn from the things the app is about: paper and stone for
+   surfaces, pine and moss for affirmative states, wheat, clay and rust for
+   degrees of caution. It replaces a near-black background with a neon green
+   accent, which read as a monitoring console rather than something you check
+   before going outside, and which pushed against a light basemap instead of
+   sitting with it.
+
+   Warm neutrals and field colours rather than anything coded masculine or
+   feminine; the hues carry meaning, not decoration.
 --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #0a100e;
-  --bg-elevated: #111a17;
-  --surface: #16211d;
-  --surface-hover: #1c2a25;
-  --border: #253630;
-  --border-strong: #345048;
+  --bg: #f4f1e9;
+  --bg-elevated: #fffdf8;
+  --surface: #ffffff;
+  --surface-hover: #f2eee3;
+  --border: #e3dccc;
+  --border-strong: #cbc1ab;
 
-  --text: #e8f1ed;
-  --text-muted: #93a9a1;
-  --text-faint: #647a72;
+  --text: #2a332c;
+  --text-muted: #5f6b60;
+  --text-faint: #8c9488;
 
-  --accent: #4ade80;
-  --accent-dim: #1b3b2c;
+  --accent: #2f6b4f;
+  --accent-dim: #e4eee6;
 
-  --grade-prime: #34d399;
-  --grade-good: #a3e635;
-  --grade-marginal: #fbbf24;
-  --grade-poor: #fb923c;
-  --grade-unsafe: #f43f5e;
+  --grade-prime: #2e8b57;
+  --grade-good: #5e8c3a;
+  --grade-marginal: #c08a1e;
+  --grade-poor: #bf6b2e;
+  --grade-unsafe: #a8402c;
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 16px;
 
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 2px rgba(42, 51, 44, 0.06), 0 10px 28px rgba(42, 51, 44, 0.1);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -44,14 +53,12 @@ html,
 body {
   margin: 0;
   padding: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-}
-
-body {
-  min-height: 100vh;
 }
 
 a {
@@ -76,7 +83,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 20px;
+  padding: 13px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   flex-wrap: wrap;
@@ -92,6 +99,7 @@ button {
   margin: 0;
   font-size: 19px;
   letter-spacing: -0.02em;
+  color: var(--accent);
 }
 
 .brand .tagline {
@@ -106,232 +114,48 @@ button {
   flex-wrap: wrap;
 }
 
+/*
+ * Three columns: list, map, detail. The detail column is zero-width until
+ * something is selected, so the map owns every pixel it can until the moment
+ * a panel is actually needed, then gives some back and takes them again on
+ * close. An overlay would have covered the map exactly where the pin was.
+ */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(340px, 400px) 1fr;
+  grid-template-columns: minmax(300px, 360px) 1fr 0px;
   flex: 1;
   min-height: 0;
+  transition: grid-template-columns 0.28s ease;
+}
+
+.workspace.has-detail {
+  grid-template-columns: minmax(280px, 340px) 1fr minmax(320px, 380px);
 }
 
 .rail {
   border-right: 1px solid var(--border);
   overflow-y: auto;
-  max-height: calc(100vh - 62px);
+  min-height: 0;
   background: var(--bg);
 }
 
 .canvas {
   position: relative;
-  min-height: 420px;
+  min-height: 0;
+  background: var(--bg);
 }
 
-/* ---------------------------------------------------------------- mobile --
-
-   Two things were wrong on a phone. The map sat below the whole list, so
-   reaching it meant scrolling past forty cards; and the detail panel was a
-   352px floating box positioned against a viewport narrower than itself.
-
-   On small screens the map comes first at a readable height, and the detail
-   panel becomes a bottom sheet -- the pattern every native map app uses,
-   because it keeps the map visible while you read about a pin.
--------------------------------------------------------------------------- */
-
-@media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
+@media (min-width: 901px) {
+  /* Lock to exactly one viewport; the rail and detail scroll inside it. */
+  .shell {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
-  .rail {
-    max-height: none;
-    border-right: none;
-    border-top: 1px solid var(--border);
-  }
-
-  /* Map above the list, tall enough to actually read. */
   .canvas {
-    order: -1;
-    height: 46vh;
-    min-height: 260px;
-    border-bottom: 1px solid var(--border);
+    min-height: 420px;
   }
-
-  .masthead {
-    padding: 11px 16px;
-    gap: 8px;
-  }
-
-  .brand h1 {
-    font-size: 17px;
-  }
-
-  /* The tagline is charm, not information; the chips are diagnostics. */
-  .brand .tagline {
-    display: none;
-  }
-
-  .statusbar {
-    gap: 6px;
-    font-size: 10px;
-  }
-
-  .chip {
-    padding: 2px 7px;
-  }
-
-  /* Source chips show name + timing; on a phone the dot alone carries it. */
-  .chip > span:last-child {
-    display: none;
-  }
-
-  /* Four activities will not fit as a row of labelled buttons at 360px. */
-  .segmented {
-    gap: 2px;
-  }
-
-  .segmented button {
-    flex-direction: column;
-    gap: 2px;
-    padding: 8px 2px;
-    font-size: 11px;
-    line-height: 1.25;
-    min-height: 46px;
-  }
-
-  .controls,
-  .ask {
-    padding: 12px 14px;
-  }
-
-  .dayscroll {
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .dayscroll::-webkit-scrollbar {
-    display: none;
-  }
-
-  .dayscroll button {
-    min-width: 58px;
-    min-height: 44px;
-  }
-
-  .ask input {
-    /* 16px keeps iOS from zooming the viewport on focus. */
-    font-size: 16px;
-    padding: 11px 12px;
-  }
-
-  .ask button {
-    min-height: 44px;
-  }
-
-  .ask-suggestions button {
-    font-size: 12px;
-    padding: 6px 11px;
-  }
-
-  .list {
-    padding: 10px 12px 32px;
-  }
-
-  .card {
-    padding: 13px;
-  }
-
-  /* Detail becomes a bottom sheet so the map stays visible behind it. */
-  .detail {
-    position: fixed;
-    inset: auto 0 0 0;
-    width: auto;
-    max-width: none;
-    max-height: 72vh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55);
-    z-index: 40;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    animation: sheet-up 0.22s ease-out;
-  }
-
-  @keyframes sheet-up {
-    from {
-      transform: translateY(16px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  /* A grab handle, so it reads as a sheet rather than a stuck panel. */
-  .detail::before {
-    content: "";
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--border-strong);
-    margin: 9px auto 0;
-  }
-
-  .detail-head {
-    padding: 10px 16px 12px;
-    position: sticky;
-    top: 0;
-    background: var(--bg-elevated);
-    z-index: 1;
-  }
-
-  .detail-close {
-    font-size: 24px;
-    padding: 4px 8px;
-    margin: -4px -4px 0 0;
-  }
-
-  .legend {
-    left: 8px;
-    bottom: 8px;
-    gap: 8px;
-    padding: 7px 9px;
-    font-size: 9.5px;
-    max-width: calc(100% - 16px);
-  }
-
-  .marker {
-    width: 30px;
-    height: 30px;
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 420px) {
-  .brand h1 {
-    font-size: 16px;
-  }
-
-  .segmented button {
-    font-size: 10px;
-  }
-
-  /* Below this width the per-source chips crowd out the title. */
-  .statusbar .chip {
-    padding: 2px 6px;
-  }
-
-  .legend span:nth-child(n + 4) {
-    display: none;
-  }
-}
-
-/* Nothing should ever scroll sideways. */
-html,
-body {
-  max-width: 100%;
-  overflow-x: hidden;
 }
 
 /* --------------------------------------------------------------- controls -- */
@@ -408,6 +232,7 @@ body {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-dim);
+  font-weight: 600;
 }
 
 .dayscroll .dow {
@@ -418,7 +243,7 @@ body {
 .dayscroll .dom {
   display: block;
   font-size: 11px;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 /* -------------------------------------------------------------------- ask -- */
@@ -447,6 +272,7 @@ body {
 
 .ask input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .ask input::placeholder {
@@ -455,8 +281,8 @@ body {
 
 .ask button {
   border: 1px solid var(--accent);
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff;
   border-radius: var(--radius);
   padding: 0 16px;
   font-size: 13px;
@@ -465,7 +291,7 @@ body {
 }
 
 .ask button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -477,17 +303,18 @@ body {
 }
 
 .ask-suggestions button {
-  border: 1px dashed var(--border-strong);
-  background: transparent;
-  color: var(--text-faint);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 11.5px;
 }
 
 .ask-suggestions button:hover {
-  color: var(--text);
+  color: var(--accent);
   border-color: var(--accent);
+  background: var(--accent-dim);
 }
 
 .answer {
@@ -531,17 +358,17 @@ body {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .card:hover {
-  background: var(--surface-hover);
   border-color: var(--border-strong);
+  box-shadow: 0 1px 3px rgba(42, 51, 44, 0.07);
 }
 
 .card[aria-selected="true"] {
   border-color: var(--accent);
-  background: var(--surface-hover);
+  box-shadow: 0 0 0 2px var(--accent-dim);
 }
 
 .card-top {
@@ -600,7 +427,6 @@ body {
   letter-spacing: 0.09em;
   margin-top: 4px;
   font-weight: 700;
-  opacity: 0.9;
 }
 
 .grade-prime { color: var(--grade-prime); }
@@ -612,27 +438,24 @@ body {
 /* ---------------------------------------------------------------- detail -- */
 
 .detail {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 352px;
-  max-width: calc(100% - 24px);
-  max-height: calc(100% - 24px);
-  overflow-y: auto;
+  grid-column: 3;
+  border-left: 1px solid var(--border);
   background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  z-index: 5;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .detail-head {
-  padding: 14px 15px 12px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated);
+  z-index: 1;
 }
 
 .detail-head h2 {
@@ -645,17 +468,19 @@ body {
   border: 0;
   background: transparent;
   color: var(--text-faint);
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
-  padding: 2px 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
 .detail-close:hover {
   color: var(--text);
+  background: var(--surface-hover);
 }
 
 .detail-body {
-  padding: 13px 15px 16px;
+  padding: 13px 16px 24px;
 }
 
 .detail-blurb {
@@ -663,29 +488,6 @@ body {
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0 0 14px;
-}
-
-.factor {
-  margin-bottom: 13px;
-}
-
-.factor-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 12px;
-  margin-bottom: 5px;
-}
-
-.factor-label {
-  font-weight: 600;
-}
-
-.factor-score {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .factors-key {
@@ -696,14 +498,27 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.factor {
+  margin-bottom: 14px;
+}
+
+.factor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  margin-bottom: 5px;
+  gap: 10px;
+}
+
+.factor-label {
+  font-weight: 600;
+}
+
 /*
- * Each factor leads with its actual reading, then a five-step rating.
- *
- * This replaces two bars and a percentage. The percentage was a lie of
- * precision -- a temperature is not 87% of anything -- and the second bar
- * showed the factor's weight, which is identical on every trail and so said
- * nothing about the one being looked at. The weight now lives in the
- * ordering, and the reading is the number the reader actually wanted.
+ * Each factor leads with its actual reading, then a five-step rating. The
+ * reading is the number the reader came for; the rating is a judgement, and
+ * five named steps say that more honestly than a percentage would.
  */
 .factor-reading {
   font-family: var(--font-mono);
@@ -733,7 +548,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.04em;
   margin-left: 6px;
-  opacity: 0.95;
+  font-weight: 600;
 }
 
 .factor-reason {
@@ -747,12 +562,7 @@ body {
   font-size: 11.5px;
   color: var(--text-faint);
   font-style: italic;
-}
-
-.factor-weight {
-  font-size: 10px;
-  color: var(--text-faint);
-  font-family: var(--font-mono);
+  margin: 5px 0 0;
 }
 
 .veto-flag {
@@ -836,69 +646,91 @@ body {
 
 .banner {
   padding: 9px 20px;
-  background: rgba(244, 63, 94, 0.1);
-  border-bottom: 1px solid rgba(244, 63, 94, 0.3);
-  color: #fda4af;
+  background: #fbeae6;
+  border-bottom: 1px solid #f0cfc7;
+  color: var(--grade-unsafe);
   font-size: 12px;
 }
 
-.empty {
-  padding: 40px 20px;
+.empty,
+.loading {
+  padding: 34px 20px;
   text-align: center;
   color: var(--text-faint);
   font-size: 13px;
 }
 
-.loading {
-  padding: 30px 20px;
-  text-align: center;
-  color: var(--text-faint);
-  font-size: 12.5px;
-}
-
 /* ------------------------------------------------------------------- map -- */
 
-/*
- * MapLibre's stylesheet is injected at runtime, after this one, and its
- * `.maplibregl-map { position: relative }` rule carries the same specificity
- * as a bare `.map`. Later wins, so the container lost its absolute
- * positioning, collapsed to zero height, and the map rendered into nothing
- * while the canvas element sat there looking perfectly healthy.
- * Scoping to the parent outranks it.
- */
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+/* MapLibre's stylesheet loads at runtime, after this one, and its
+   `.maplibregl-map { position: relative }` rule has equal specificity to a
+   bare `.map`. Scoping to the parent outranks it; without this the container
+   collapsed to zero height and the map drew into nothing. */
 .canvas > .map {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  background: var(--surface-hover);
 }
 
+.map-loading,
 .map-fallback {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 24px;
   text-align: center;
   color: var(--text-faint);
   font-size: 13px;
   line-height: 1.6;
+  background: var(--surface-hover);
+  z-index: 2;
+}
+
+.map-fallback p {
+  margin: 0;
+  max-width: 34ch;
+}
+
+.map-fallback-note {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.map-fallback button {
+  margin-top: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .marker {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 2px solid rgba(10, 16, 14, 0.85);
+  border: 2px solid #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10.5px;
   font-weight: 700;
-  color: #07110d;
+  color: #fff;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px rgba(42, 51, 44, 0.35);
   font-variant-numeric: tabular-nums;
   transition: transform 0.12s ease;
 }
@@ -908,7 +740,7 @@ body {
 }
 
 .marker-selected {
-  outline: 2px solid var(--text);
+  outline: 3px solid var(--text);
   outline-offset: 1px;
   transform: scale(1.15);
 }
@@ -918,7 +750,7 @@ body {
   left: 12px;
   bottom: 12px;
   z-index: 4;
-  background: rgba(10, 16, 14, 0.88);
+  background: rgba(255, 253, 248, 0.94);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 9px 11px;
@@ -928,6 +760,7 @@ body {
   color: var(--text-muted);
   backdrop-filter: blur(6px);
   flex-wrap: wrap;
+  box-shadow: 0 1px 4px rgba(42, 51, 44, 0.12);
 }
 
 .legend span {
@@ -938,4 +771,184 @@ body {
 
 .maplibregl-ctrl-attrib {
   font-size: 10px;
+}
+
+/* ---------------------------------------------------------------- mobile --
+
+   The map leads, because burying it under forty cards meant scrolling to
+   reach it, and the detail panel becomes a bottom sheet so the map stays
+   visible behind whatever you just tapped.
+-------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .workspace,
+  .workspace.has-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    border-right: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .canvas {
+    order: -1;
+    height: 46vh;
+    min-height: 260px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .masthead {
+    padding: 11px 16px;
+    gap: 8px;
+  }
+
+  .brand h1 {
+    font-size: 17px;
+  }
+
+  .brand .tagline {
+    display: none;
+  }
+
+  .statusbar {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .chip {
+    padding: 2px 7px;
+  }
+
+  .chip > span:last-child {
+    display: none;
+  }
+
+  .segmented {
+    gap: 2px;
+  }
+
+  .segmented button {
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 2px;
+    font-size: 11px;
+    line-height: 1.25;
+    min-height: 46px;
+  }
+
+  .controls,
+  .ask {
+    padding: 12px 14px;
+  }
+
+  .dayscroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .dayscroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dayscroll button {
+    min-width: 58px;
+    min-height: 44px;
+  }
+
+  .ask input {
+    /* 16px keeps iOS from zooming the viewport on focus. */
+    font-size: 16px;
+    padding: 11px 12px;
+  }
+
+  .ask button {
+    min-height: 44px;
+  }
+
+  .ask-suggestions button {
+    font-size: 12px;
+    padding: 6px 11px;
+  }
+
+  .list {
+    padding: 10px 12px 32px;
+  }
+
+  .card {
+    padding: 13px;
+  }
+
+  .detail {
+    position: fixed;
+    inset: auto 0 0 0;
+    grid-column: auto;
+    max-height: 72vh;
+    border-left: none;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -8px 32px rgba(42, 51, 44, 0.22);
+    z-index: 40;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: sheet-up 0.22s ease-out;
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(16px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .detail::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    margin: 9px auto 0;
+  }
+
+  .detail-head {
+    padding: 10px 16px 12px;
+  }
+
+  .detail-close {
+    font-size: 24px;
+    padding: 4px 8px;
+  }
+
+  .legend {
+    left: 8px;
+    bottom: 8px;
+    gap: 8px;
+    padding: 7px 9px;
+    font-size: 9.5px;
+    max-width: calc(100% - 16px);
+  }
+
+  .marker {
+    width: 30px;
+    height: 30px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand h1 {
+    font-size: 16px;
+  }
+
+  .segmented button {
+    font-size: 10px;
+  }
+
+  .legend span:nth-child(n + 4) {
+    display: none;
+  }
 }
