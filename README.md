@@ -186,7 +186,7 @@ cells at a time, and returns `scored` and `available` so the UI can say
 | [Open-Meteo](https://open-meteo.com/) | temperature, precipitation + 72 h history, wind, gusts, snow depth, daylight | no |
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | US AQI, PM2.5 (daytime peak) | no |
 | [NIFC WFIGS](https://data-nifc.opendata.arcgis.com/) | active wildfire perimeters within 35 mi | no |
-| [CARTO](https://carto.com/attributions) / OpenStreetMap | basemap tiles (raster) | no |
+| [OpenFreeMap](https://openfreemap.org/) | basemap tiles | no |
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
 | [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported, not live) | no |
 

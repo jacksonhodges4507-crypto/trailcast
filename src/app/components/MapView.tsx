@@ -19,99 +19,21 @@ import { GRADE_COLOR } from "./grade";
 const MAPLIBRE_JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css";
 /**
- * A raster basemap defined inline, rather than a hosted vector style.
+ * OpenFreeMap's vector style: free, keyless, and explicitly unmetered.
  *
- * The previous choice was a vector style whose JSON, sprites and TileJSON all
- * fetched with 200s -- and then the map sat blank forever, firing neither
- * `load` nor `error`. A vector basemap has a lot of surface to fail on: a
- * 111-layer style document, a sprite sheet, glyph ranges, and tile parsing in
- * a worker, any of which can stall silently.
+ * A detour through CARTO's raster tiles is worth recording, because the
+ * failure was instructive. CARTO now gates its basemaps behind an API key,
+ * and rather than returning 401s it serves tile images reading "API KEY
+ * REQUIRED" -- so every request succeeded, the map reported itself loaded,
+ * and the only way to find out was to look at the rendered pixels. A green
+ * network panel proved nothing.
  *
- * This app draws pins on a backdrop. It does not need vector styling, so it
- * does not need that surface. Raster tiles are one request each, rendered
- * directly, with the style defined here so there is no style document to
- * fetch at all.
+ * The real lesson was elsewhere anyway: the original basemap was fine, and
+ * what made its occasional slowness look like a dead map was this component
+ * gating the markers on it. That is fixed below, and it is what actually
+ * matters -- a basemap is a backdrop, and the pins should never wait for it.
  */
-const BASEMAP_STYLE = {
-  version: 8,
-  sources: {
-    basemap: {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-      ],
-      tileSize: 256,
-      maxzoom: 20,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    },
-  },
-  layers: [{ id: "basemap", type: "raster", source: "basemap" }],
-} as const;
-
-/** How long the basemap gets before we say it is being slow. */
-const LOAD_DEADLINE_MS = 12000;
-
-interface MapLibreMap {
-  addControl(control: unknown, position?: string): void;
-  fitBounds(bounds: [[number, number], [number, number]], options?: unknown): void;
-  flyTo(options: unknown): void;
-  resize(): void;
-  remove(): void;
-  loaded(): boolean;
-  on(event: string, handler: (payload?: unknown) => void): void;
-}
-
-interface MapLibreMarker {
-  setLngLat(coords: [number, number]): MapLibreMarker;
-  addTo(map: MapLibreMap): MapLibreMarker;
-  remove(): void;
-}
-
-interface MapLibreNamespace {
-  Map: new (options: Record<string, unknown>) => MapLibreMap;
-  Marker: new (options?: Record<string, unknown>) => MapLibreMarker;
-  NavigationControl: new (options?: Record<string, unknown>) => unknown;
-}
-
-declare global {
-  interface Window {
-    maplibregl?: MapLibreNamespace;
-  }
-}
-
-let loaderPromise: Promise<MapLibreNamespace> | null = null;
-
-function loadMapLibre(): Promise<MapLibreNamespace> {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("MapLibre requires a browser"));
-  }
-  if (window.maplibregl) return Promise.resolve(window.maplibregl);
-  if (loaderPromise) return loaderPromise;
-
-  loaderPromise = new Promise<MapLibreNamespace>((resolve, reject) => {
-    if (!document.querySelector(`link[href="${MAPLIBRE_CSS}"]`)) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = MAPLIBRE_CSS;
-      document.head.appendChild(link);
-    }
-
-    const script = document.createElement("script");
-    script.src = MAPLIBRE_JS;
-    script.async = true;
-    script.onload = () => {
-      if (window.maplibregl) resolve(window.maplibregl);
-      else reject(new Error("the map library loaded but did not register"));
-    };
-    script.onerror = () => reject(new Error("could not reach the map library"));
-    document.head.appendChild(script);
-  });
-
-  return loaderPromise;
-}
+const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
 export interface MapViewProps {
   reports: TrailReport[];
@@ -169,7 +91,7 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
         const map = new maplibregl.Map({
           container: containerRef.current,
-          style: BASEMAP_STYLE,
+          style: STYLE_URL,
           center: [-111.7, 40.5],
           zoom: 7.4,
           attributionControl: { compact: true },
