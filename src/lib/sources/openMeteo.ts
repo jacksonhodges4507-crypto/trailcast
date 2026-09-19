@@ -207,16 +207,20 @@ export const openMeteoAdapter: SourceAdapter = {
         });
       }
 
+      // Recorded for every day in the payload, not just the requested ones:
+      // a 24-hour trend needs the day before, which is never itself a
+      // requested date. Reading it inside the guard below left the trend
+      // permanently unavailable.
+      if (hour === 12) {
+        const hpa = pressure?.[i];
+        if (hpa !== null && hpa !== undefined) noonPressure.set(date, hpa);
+      }
+
       if (!dates.includes(date)) continue;
 
       if (hour === 9) {
         const t = temps?.[i];
         if (t !== null && t !== undefined) dayStartTemp.set(date, t);
-      }
-
-      if (hour === 12) {
-        const hpa = pressure?.[i];
-        if (hpa !== null && hpa !== undefined) noonPressure.set(date, hpa);
       }
 
       // Daylight-ish window: what a user is actually out in.
