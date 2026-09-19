@@ -35,6 +35,74 @@ const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplib
  */
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
+/** How long the basemap gets before we say it is being slow. */
+const LOAD_DEADLINE_MS = 12000;
+
+/** The slice of the MapLibre API this component actually uses. */
+interface MapLibreMap {
+  addControl(control: unknown, position?: string): void;
+  fitBounds(bounds: [[number, number], [number, number]], options?: unknown): void;
+  flyTo(options: unknown): void;
+  resize(): void;
+  remove(): void;
+  loaded(): boolean;
+  on(event: string, handler: (payload?: unknown) => void): void;
+}
+
+interface MapLibreMarker {
+  setLngLat(coords: [number, number]): MapLibreMarker;
+  addTo(map: MapLibreMap): MapLibreMarker;
+  remove(): void;
+}
+
+interface MapLibreNamespace {
+  Map: new (options: Record<string, unknown>) => MapLibreMap;
+  Marker: new (options?: Record<string, unknown>) => MapLibreMarker;
+  NavigationControl: new (options?: Record<string, unknown>) => unknown;
+}
+
+declare global {
+  interface Window {
+    maplibregl?: MapLibreNamespace;
+  }
+}
+
+let loaderPromise: Promise<MapLibreNamespace> | null = null;
+
+/**
+ * Load the library once, from a CDN, and share the promise. Bundling a
+ * ~900 kB dependency used by one component would put it on the critical path
+ * for the list view, which is the part that has to work.
+ */
+function loadMapLibre(): Promise<MapLibreNamespace> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("MapLibre requires a browser"));
+  }
+  if (window.maplibregl) return Promise.resolve(window.maplibregl);
+  if (loaderPromise) return loaderPromise;
+
+  loaderPromise = new Promise<MapLibreNamespace>((resolve, reject) => {
+    if (!document.querySelector(`link[href="${MAPLIBRE_CSS}"]`)) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = MAPLIBRE_CSS;
+      document.head.appendChild(link);
+    }
+
+    const script = document.createElement("script");
+    script.src = MAPLIBRE_JS;
+    script.async = true;
+    script.onload = () => {
+      if (window.maplibregl) resolve(window.maplibregl);
+      else reject(new Error("the map library loaded but did not register"));
+    };
+    script.onerror = () => reject(new Error("could not reach the map library"));
+    document.head.appendChild(script);
+  });
+
+  return loaderPromise;
+}
+
 export interface MapViewProps {
   reports: TrailReport[];
   selectedId: string | null;
