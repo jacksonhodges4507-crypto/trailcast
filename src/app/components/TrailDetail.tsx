@@ -28,6 +28,18 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
   const { trail, verdict, conditions } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
 
+  /*
+   * `confidence` is the share of scoring weight that had data behind it. It
+   * was rendered as "confidence 84%", which reads as statistical confidence
+   * in the forecast -- something this app does not compute and could not
+   * honestly claim. It is really a count of how many inputs arrived, so it
+   * is now shown as one.
+   */
+  const withData = verdict.factors.filter((f) => f.score !== undefined);
+  const missingInputs = verdict.factors
+    .filter((f) => f.score === undefined)
+    .map((f) => f.label);
+
   return (
     <aside className="detail">
       <div className="detail-head">
@@ -121,7 +133,15 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         ) : null}
 
         <div className="sources">
-          <h3>Sources · confidence {Math.round(verdict.confidence * 100)}%</h3>
+          <h3>
+            Sources · {withData.length} of {verdict.factors.length} inputs available
+          </h3>
+          {missingInputs.length > 0 ? (
+            <div className="source-item" style={{ color: "var(--grade-marginal)" }}>
+              No data for {missingInputs.join(", ").toLowerCase()} — those factors were
+              dropped rather than guessed.
+            </div>
+          ) : null}
           {verdict.sources.length === 0 ? (
             <div className="source-item">No sources responded for this trail.</div>
           ) : (

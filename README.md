@@ -100,6 +100,18 @@ UI. Open the detail panel and every factor links back to the exact request that
 produced it. This is the feature that makes the tool trustworthy enough to act
 on. → [`types.ts`](src/lib/types.ts)
 
+**4. A percentage has to be a percentage.**
+Auditing every number that reaches a user split them cleanly. Precipitation
+chance (`45% chance`) is a real probability; a factor's share of the weighted
+sum (`counts for 16%`) is a real share; sandstone losing `75%` of its strength
+is a cited figure. Those stay. `confidence 84%` did not: it is the fraction of
+scoring weight that had data behind it, and rendering it as a percentage
+invited reading it as statistical confidence in the forecast — something this
+app does not compute. It now reads `7 of 8 inputs available`, and names the
+missing ones. On the trail cards it appears only when something is actually
+missing, since a figure that reads 100% on every card is noise everywhere
+except the one place it matters.
+
 **4. One dead source never blanks the page.**
 Sources are fetched in parallel and settled independently; each has its own TTL
 and a stale-while-revalidate window. The header shows live per-source health —

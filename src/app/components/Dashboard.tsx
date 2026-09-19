@@ -191,7 +191,23 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                   <div className="card-stats">
                     <span>{report.trail.distanceMi} mi</span>
                     <span>{report.trail.gainFt.toLocaleString()} ft</span>
-                    <span>{Math.round(report.verdict.confidence * 100)}% conf</span>
+                    {/*
+                      Confidence used to show here as a percentage on every
+                      card. It is a count of inputs received, not a
+                      probability, and it reads 100% almost always -- so it
+                      was noise on every card and silent in the one case that
+                      mattered. It now appears only when something is missing.
+                    */}
+                    {report.verdict.factors.some((f) => f.score === undefined) ? (
+                      <span style={{ color: "var(--grade-marginal)" }}>
+                        {report.verdict.factors.filter((f) => f.score === undefined).length}{" "}
+                        input
+                        {report.verdict.factors.filter((f) => f.score === undefined).length === 1
+                          ? ""
+                          : "s"}{" "}
+                        missing
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               ))}
