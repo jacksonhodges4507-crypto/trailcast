@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bboxAround, gridCentre, gridKey, haversineMi } from "@/lib/geo";
 import { selectCandidates } from "@/lib/report";
+import { ratingFor, ratingSteps } from "@/app/components/grade";
 import { trail } from "./fixtures";
 import type { Trail } from "@/lib/types";
 
@@ -84,5 +85,22 @@ describe("selectCandidates", () => {
     const big = { ...trailAt("big", 39, -111), routes: 400 };
     const small = { ...trailAt("small", 39, -111), routes: 8 };
     expect(selectCandidates([small, big], 1).map((t) => t.id)).toEqual(["big"]);
+  });
+});
+
+describe("rating scale", () => {
+  it("maps scores onto five named steps rather than a percentage", () => {
+    expect(ratingFor(95)).toBe("excellent");
+    expect(ratingFor(70)).toBe("good");
+    expect(ratingFor(50)).toBe("fair");
+    expect(ratingFor(30)).toBe("poor");
+    expect(ratingFor(10)).toBe("critical");
+  });
+
+  it("always shows at least one filled step, and never more than five", () => {
+    expect(ratingSteps(0)).toBe(1);
+    expect(ratingSteps(1)).toBe(1);
+    expect(ratingSteps(100)).toBe(5);
+    expect(ratingSteps(41)).toBe(3);
   });
 });

@@ -688,68 +688,52 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * Two bars per factor, because they answer two different questions: how good
- * is this today, and how much does it count. Showing both as bare numbers on
- * one line read as a single confusing statistic.
- */
 .factors-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
   font-size: 10.5px;
   color: var(--text-faint);
   padding-bottom: 11px;
-  margin-bottom: 13px;
+  margin-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
 
-.factors-key span {
-  display: inline-flex;
+/*
+ * Each factor leads with its actual reading, then a five-step rating.
+ *
+ * This replaces two bars and a percentage. The percentage was a lie of
+ * precision -- a temperature is not 87% of anything -- and the second bar
+ * showed the factor's weight, which is identical on every trail and so said
+ * nothing about the one being looked at. The weight now lives in the
+ * ordering, and the reading is the number the reader actually wanted.
+ */
+.factor-reading {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rating {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
+  margin-top: 2px;
 }
 
-.key-swatch {
-  width: 14px;
-  height: 5px;
+.rating-step {
+  height: 4px;
+  width: 15px;
   border-radius: 999px;
-  display: inline-block;
+  flex: 0 0 auto;
+  transition: background 0.15s ease;
 }
 
-.key-condition {
-  background: var(--accent);
-}
-
-.key-weight {
-  background: var(--text-faint);
-  height: 3px;
-}
-
-.meter {
-  background: var(--border);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.meter > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.meter-condition {
-  height: 5px;
-}
-
-.meter-weight {
-  height: 3px;
-  margin-top: 3px;
-  opacity: 0.75;
-}
-
-.meter-weight > span {
-  background: var(--text-faint);
+.rating-word {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+  opacity: 0.95;
 }
 
 .factor-reason {

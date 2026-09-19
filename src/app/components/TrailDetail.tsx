@@ -2,7 +2,14 @@
 
 import type { TrailReport } from "@/lib/types";
 import { ACTIVITIES } from "@/lib/activities";
-import { GRADE_CLASS, GRADE_COLOR, GRADE_TEXT, scoreColor } from "./grade";
+import {
+  GRADE_CLASS,
+  GRADE_COLOR,
+  GRADE_TEXT,
+  RATING_COLOR,
+  ratingFor,
+  ratingSteps,
+} from "./grade";
 
 export interface TrailDetailProps {
   report: TrailReport;
@@ -51,18 +58,14 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         </div>
 
         <div className="factors-key">
-          <span>
-            <i className="key-swatch key-condition" /> condition today
-          </span>
-          <span>
-            <i className="key-swatch key-weight" /> share of the {activityLabel} score
-          </span>
+          Ordered by how much each matters for {activityLabel}
         </div>
 
         {verdict.factors.map((factor) => {
-          const weightPct = Math.round(factor.weight * 100);
           const hasScore = factor.score !== undefined;
-          const scorePct = hasScore ? Math.round(factor.score as number) : 0;
+          const rating = hasScore ? ratingFor(factor.score as number) : null;
+          const steps = hasScore ? ratingSteps(factor.score as number) : 0;
+          const weightPct = Math.round(factor.weight * 100);
 
           return (
             <div className="factor" key={factor.id}>
@@ -71,34 +74,31 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
                   {factor.label}
                   {factor.veto ? <span className="veto-flag">veto</span> : null}
                 </span>
-                <span className="factor-score">
-                  {hasScore ? `${scorePct}%` : "no data"}
-                </span>
+                <span className="factor-reading">{factor.display ?? "\u2014"}</span>
               </div>
 
               <div
-                className="meter meter-condition"
-                title={
-                  hasScore
-                    ? `Condition today: ${scorePct} out of 100`
-                    : "No data for this factor"
-                }
+                className="rating"
+                title={`Rated ${rating ?? "no data"} for ${activityLabel}; counts for ${weightPct}% of the score`}
+                aria-label={`${rating ?? "no data"}, ${steps} of 5`}
               >
-                <span
-                  style={{
-                    width: `${hasScore ? scorePct : 0}%`,
-                    background: factor.veto
-                      ? GRADE_COLOR.unsafe
-                      : scoreColor(factor.score, verdict.grade),
-                  }}
-                />
-              </div>
-
-              <div
-                className="meter meter-weight"
-                title={`Counts for ${weightPct}% of the ${activityLabel} score`}
-              >
-                <span style={{ width: `${weightPct}%` }} />
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <span
+                    key={i}
+                    className="rating-step"
+                    style={{
+                      background:
+                        rating && i < steps
+                          ? factor.veto
+                            ? RATING_COLOR.critical
+                            : RATING_COLOR[rating]
+                          : "var(--border)",
+                    }}
+                  />
+                ))}
+                <em className="rating-word" style={{ color: rating ? RATING_COLOR[rating] : "var(--text-faint)" }}>
+                  {rating ?? "no data"}
+                </em>
               </div>
 
               <p className={factor.missingReason ? "factor-missing" : "factor-reason"}>
@@ -169,7 +169,7 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         <div style={{ marginTop: 14 }}>
           <span className={`score-grade ${GRADE_CLASS[verdict.grade]}`}>
             {GRADE_TEXT[verdict.grade]}
-            {verdict.score !== undefined ? ` · ${verdict.score}%` : ""}
+            {verdict.score !== undefined ? ` · ${verdict.score}/100 overall` : ""}
           </span>
         </div>
       </div>

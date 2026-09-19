@@ -396,3 +396,45 @@ describe("imported climbing areas", () => {
     expect(factor.veto).toBe(true);
   });
 });
+
+describe("factor presentation", () => {
+  it("carries the real reading in real units, not a percentage", () => {
+    const verdict = scoreTrail(trail(), goodConditions({ tempMaxF: 62, tempMinF: 44 }), "hike");
+    const temp = verdict.factors.find((f) => f.id === "temperature");
+
+    expect(temp?.display).toBe("44–62 °F");
+    // The 0-100 score stays available for comparison; it is just not the
+    // number the panel leads with.
+    expect(temp?.score).toBeDefined();
+  });
+
+  it("gives every scored factor a reading", () => {
+    const verdict = scoreTrail(
+      trail({ rockType: "granite" }),
+      goodConditions({ hoursSincePrecip: 30 }),
+      "climb",
+    );
+    for (const factor of verdict.factors) {
+      if (factor.score !== undefined) expect(factor.display).toBeTruthy();
+    }
+  });
+
+  it("orders factors by how much they matter for the activity", () => {
+    const climbing = scoreTrail(
+      trail({ rockType: "sandstone" }),
+      goodConditions({ hoursSincePrecip: 200 }),
+      "climb",
+    );
+    const riding = scoreTrail(trail(), goodConditions(), "mtb");
+
+    // Rock condition dominates climbing; trail surface dominates riding.
+    expect(climbing.factors[0]?.id).toBe("rock");
+    expect(riding.factors[0]?.id).toBe("surface");
+  });
+
+  it("keeps the ordering stable regardless of the day's conditions", () => {
+    const fine = scoreTrail(trail(), goodConditions(), "hike");
+    const grim = scoreTrail(trail(), goodConditions({ tempMaxF: 99, usAqi: 180 }), "hike");
+    expect(fine.factors.map((f) => f.id)).toEqual(grim.factors.map((f) => f.id));
+  });
+});

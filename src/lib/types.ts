@@ -165,6 +165,15 @@ export interface Factor {
   score?: number;
   /** Weight actually applied after normalisation, 0-1. */
   weight: number;
+  /**
+   * The measured reading in its own units — "62 °F", "AQI 39", "31 h dry".
+   *
+   * This is what the panel leads with. The 0-100 `score` is an internal
+   * comparison device; rendering it to a user as a percentage claimed a
+   * precision it does not have and, worse, hid the actual number they came
+   * for. Temperature is not a percentage.
+   */
+  display?: string;
   /** One sentence a human can read without looking at the number. */
   reason: string;
   /** Present when the factor could not be scored. */

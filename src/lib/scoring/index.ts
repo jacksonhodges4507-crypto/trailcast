@@ -88,6 +88,18 @@ export function scoreTrail(
     factor.weight = weightAll > 0 ? factor.weight / weightAll : 0;
   }
 
+  // Order by how much each factor matters for this activity, worst first
+  // within a tie. An earlier version drew a second bar per factor showing its
+  // weight, which was identical on every trail and so told the reader nothing
+  // about the one in front of them. Encoding it in the ordering says the same
+  // thing without the ink: for climbing, rock condition leads; for riding,
+  // trail surface does.
+  factors.sort((a, b) => {
+    const byWeight = b.weight - a.weight;
+    if (Math.abs(byWeight) > 0.0001) return byWeight;
+    return (a.score ?? 101) - (b.score ?? 101);
+  });
+
   const hasVeto = factors.some((f) => f.veto === true);
   const score = weightWithData > 0 ? weightedTotal / weightWithData : undefined;
   const confidence = weightAll > 0 ? weightWithData / weightAll : 0;

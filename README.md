@@ -83,6 +83,16 @@ ridge, a fire inside five miles — force the grade to *no-go* regardless of how
 good everything else looks. Averages hide exactly the conditions that hurt
 people. → [`scoring/rules.ts`](src/lib/scoring/rules.ts)
 
+**3. Show the reading, not the model's opinion of it.**
+An earlier panel rendered each factor as a percentage with a second bar for
+its weight. Both were wrong. A temperature is not 87% of anything, so the
+percentage claimed a precision the score does not have while hiding the number
+the reader actually wanted; and the weight bar was identical on every trail,
+so it could not say anything about the one on screen. Each factor now leads
+with its real reading — `44–62 °F`, `AQI 39`, `31 h dry` — followed by a
+five-step rating, and weight is expressed by the ordering instead of ink.
+→ [`TrailDetail.tsx`](src/app/components/TrailDetail.tsx)
+
 **3. Every number is traceable.**
 A `SourceRef` — source, URL, upstream field, fetch timestamp — is attached at
 the moment a value is parsed and carried through assembly, scoring and into the
