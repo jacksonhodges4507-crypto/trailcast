@@ -679,7 +679,44 @@ button {
   background: var(--surface-hover);
 }
 
-.map-loading,
+/*
+ * A non-blocking note, not a curtain. The map underneath stays interactive
+ * with its pins, because those never depended on the basemap.
+ */
+.map-note {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 253, 248, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  box-shadow: 0 1px 6px rgba(42, 51, 44, 0.14);
+  max-width: calc(100% - 24px);
+}
+
+.map-note-slow {
+  border-color: var(--grade-marginal);
+}
+
+.map-note button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 .map-fallback {
   position: absolute;
   inset: 0;

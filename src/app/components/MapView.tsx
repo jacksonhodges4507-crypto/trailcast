@@ -51,8 +51,8 @@ const BASEMAP_STYLE = {
   layers: [{ id: "basemap", type: "raster", source: "basemap" }],
 } as const;
 
-/** How long the basemap gets before we call it a failure. */
-const LOAD_DEADLINE_MS = 9000;
+/** How long the basemap gets before we say it is being slow. */
+const LOAD_DEADLINE_MS = 12000;
 
 interface MapLibreMap {
   addControl(control: unknown, position?: string): void;
@@ -124,7 +124,25 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, { marker: MapLibreMarker; el: HTMLElement }>>(new Map());
 
-  const [ready, setReady] = useState(false);
+  /*
+   * Three separate things, which an earlier version collapsed into one and
+   * got wrong in both directions.
+   *
+   * `mapReady` means the map object exists. Markers and fitBounds only need
+   * this -- they do not need the basemap -- so gating them on tiles meant a
+   * slow tile server hid the pins, which are the actual product.
+   *
+   * `tilesReady` means the basemap drew. It controls a loading note, nothing
+   * more.
+   *
+   * `failure` is reserved for hard failures: the library could not load, or
+   * the map could not be constructed. A slow basemap is not a failure, and
+   * treating it as one tore down an in-flight load so every retry restarted
+   * the same slow fetch and timed out again.
+   */
+  const [mapReady, setMapReady] = useState(false);
+  const [tilesReady, setTilesReady] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -135,7 +153,9 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
   const retry = useCallback(() => {
     setFailure(null);
-    setReady(false);
+    setSlow(false);
+    setTilesReady(false);
+    setMapReady(false);
     setAttempt((n) => n + 1);
   }, []);
 
@@ -157,10 +177,16 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
+        // The map object is usable now: markers, camera and interaction all
+        // work before a single tile arrives.
+        mapRef.current = map;
+        setMapReady(true);
+
         map.on("load", () => {
           if (cancelled) return;
           clearTimeout(deadline);
-          setReady(true);
+          setTilesReady(true);
+          setSlow(false);
         });
 
         map.on("error", (payload?: unknown) => {
@@ -174,14 +200,13 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
           if (message) console.warn("[trailcast] map error:", message);
         });
 
-        // The deadline is the important part: the observed failure produced
-        // no error event at all, just a blank rectangle forever.
+        // Note slowness, but never tear the map down for it. The observed
+        // failure produced no error event at all, and a late-arriving
+        // basemap should simply appear rather than be cancelled.
         deadline = setTimeout(() => {
           if (cancelled || map.loaded()) return;
-          setFailure("The basemap did not finish loading.");
+          setSlow(true);
         }, LOAD_DEADLINE_MS);
-
-        mapRef.current = map;
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -213,12 +238,12 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [ready]);
+  }, [mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
     const maplibregl = typeof window !== "undefined" ? window.maplibregl : undefined;
-    if (!map || !maplibregl || !ready) return;
+    if (!map || !maplibregl || !mapReady) return;
 
     for (const { marker } of markersRef.current.values()) marker.remove();
     markersRef.current.clear();
@@ -263,7 +288,7 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
         { padding: 70, maxZoom: 11, duration: 600 },
       );
     }
-  }, [reports, ready]);
+  }, [reports, mapReady]);
 
   useEffect(() => {
     for (const [id, { el }] of markersRef.current.entries()) {
@@ -272,14 +297,14 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
     if (!selectedId) return;
     const target = reports.find((r) => r.trail.id === selectedId);
-    if (target && mapRef.current && ready) {
+    if (target && mapRef.current && mapReady) {
       mapRef.current.flyTo({
         center: [target.trail.lon, target.trail.lat],
         zoom: 11,
         duration: 700,
       });
     }
-  }, [selectedId, reports, ready]);
+  }, [selectedId, reports, mapReady]);
 
   if (failure) {
     return (
@@ -298,7 +323,20 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
   return (
     <div className="map" ref={containerRef}>
-      {!ready ? <div className="map-loading">Loading basemap…</div> : null}
+      {!tilesReady ? (
+        <div className={slow ? "map-note map-note-slow" : "map-note"}>
+          {slow ? (
+            <>
+              <span>Basemap is slow to load — pins and scores are live.</span>
+              <button type="button" onClick={retry}>
+                Reload map
+              </button>
+            </>
+          ) : (
+            <span>Loading basemap…</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
