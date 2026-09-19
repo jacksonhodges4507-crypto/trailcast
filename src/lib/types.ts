@@ -6,7 +6,7 @@
  * factors and verdicts so the UI can always answer "says who, and when?".
  */
 
-export type ActivityId = "hike" | "trail_run" | "mtb" | "climb";
+export type ActivityId = "hike" | "trail_run" | "mtb" | "climb" | "fish";
 
 export interface Activity {
   id: ActivityId;
@@ -28,6 +28,9 @@ export type FactorId =
   | "daylight"
   | "surface"
   | "rock"
+  | "water_temp"
+  | "water_flow"
+  | "pressure"
   | "wildfire";
 
 /**
@@ -142,6 +145,20 @@ export interface Conditions {
   sunriseLocal?: string;
   sunsetLocal?: string;
   daylightHours?: number;
+  /** Mean daytime cloud cover, 0-100. */
+  cloudCoverPct?: number;
+  /** Sea-level pressure at midday, hPa. */
+  pressureHpa?: number;
+  /** Change in midday pressure against the previous day, hPa. */
+  pressureChangeHpa?: number;
+  /** Water temperature at the nearest gauge, F. */
+  waterTempF?: number;
+  /** Discharge at the nearest gauge, cubic feet per second. */
+  streamflowCfs?: number;
+  /** How far that gauge is from the water. */
+  gaugeDistanceMi?: number;
+  /** USGS identifier of the gauge used. */
+  gaugeId?: string;
   /** Active wildfire perimeters within the alert radius. */
   wildfires?: WildfireSummary[];
   /** Provenance for each populated field above. */

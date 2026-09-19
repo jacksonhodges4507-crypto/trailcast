@@ -11,6 +11,8 @@ const HOURLY = [
   "wind_speed_10m",
   "wind_gusts_10m",
   "snow_depth",
+  "pressure_msl",
+  "cloud_cover",
 ] as const;
 
 const DAILY = [
@@ -166,6 +168,8 @@ export const openMeteoAdapter: SourceAdapter = {
     const wind = asNumberArray(hourly?.["wind_speed_10m"]);
     const gust = asNumberArray(hourly?.["wind_gusts_10m"]);
     const snow = asNumberArray(hourly?.["snow_depth"]);
+    const pressure = asNumberArray(hourly?.["pressure_msl"]);
+    const cloud = asNumberArray(hourly?.["cloud_cover"]);
 
     const hourlyPrecipUnit =
       typeof hourlyUnits["precipitation"] === "string"
@@ -182,6 +186,9 @@ export const openMeteoAdapter: SourceAdapter = {
     const dayProb = new Map<string, number>();
     const daySnow = new Map<string, number>();
     const dayStartTemp = new Map<string, number>();
+    const dayCloud = new Map<string, number[]>();
+    // Pressure at a fixed hour each day, so a day-over-day trend is comparable.
+    const noonPressure = new Map<string, number>();
 
     // Rolling 72-hour precipitation totals ending at each date's midnight.
     const hourlyPrecipByTs: { ts: number; inches: number }[] = [];
@@ -207,6 +214,11 @@ export const openMeteoAdapter: SourceAdapter = {
         if (t !== null && t !== undefined) dayStartTemp.set(date, t);
       }
 
+      if (hour === 12) {
+        const hpa = pressure?.[i];
+        if (hpa !== null && hpa !== undefined) noonPressure.set(date, hpa);
+      }
+
       // Daylight-ish window: what a user is actually out in.
       if (hour >= 7 && hour <= 19) {
         const w = wind?.[i];
@@ -220,6 +232,13 @@ export const openMeteoAdapter: SourceAdapter = {
         const pp = precipProb?.[i];
         if (pp !== null && pp !== undefined) {
           dayProb.set(date, Math.max(dayProb.get(date) ?? 0, pp));
+        }
+
+        const cc = cloud?.[i];
+        if (cc !== null && cc !== undefined) {
+          const bucket = dayCloud.get(date) ?? [];
+          bucket.push(cc);
+          dayCloud.set(date, bucket);
         }
       }
 
@@ -244,6 +263,32 @@ export const openMeteoAdapter: SourceAdapter = {
 
       const t = dayStartTemp.get(date);
       if (t !== undefined) set(date, "tempAtStartF", t, "hourly.temperature_2m@09:00");
+
+      const clouds = dayCloud.get(date);
+      if (clouds && clouds.length > 0) {
+        const mean = clouds.reduce((sum, v) => sum + v, 0) / clouds.length;
+        set(date, "cloudCoverPct", mean, "hourly.cloud_cover (daytime mean)");
+      }
+
+      // Barometric trend: noon today against noon the day before. Falling
+      // pressure ahead of a front is the classic feeding window; a sharp rise
+      // behind one is the classic dead day.
+      const todayPressure = noonPressure.get(date);
+      if (todayPressure !== undefined) {
+        set(date, "pressureHpa", todayPressure, "hourly.pressure_msl@12:00");
+        const previous = new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        const yesterdayPressure = noonPressure.get(previous);
+        if (yesterdayPressure !== undefined) {
+          set(
+            date,
+            "pressureChangeHpa",
+            todayPressure - yesterdayPressure,
+            "hourly.pressure_msl (24 h change)",
+          );
+        }
+      }
 
       const midnight = Date.parse(`${date}T00:00:00Z`);
       if (Number.isFinite(midnight)) {

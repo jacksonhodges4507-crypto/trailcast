@@ -2,6 +2,7 @@ import type { SourceAdapter, SourceContext, SourceResult } from "./types";
 import { openMeteoAdapter } from "./openMeteo";
 import { airQualityAdapter } from "./airQuality";
 import { wildfireAdapter } from "./wildfire";
+import { usgsWaterAdapter } from "./usgsWater";
 import { withCache } from "../cache";
 import { gridKey } from "../geo";
 import type { SourceStatus } from "../types";
@@ -15,6 +16,7 @@ export const ADAPTERS: SourceAdapter[] = [
   openMeteoAdapter,
   airQualityAdapter,
   wildfireAdapter,
+  usgsWaterAdapter,
 ];
 
 export interface GatherResult {

@@ -64,9 +64,10 @@ export function rankByProximity(
 /**
  * Deterministic narrator.
  *
- * Produces the same grounded summary the model is asked for, from the same
- * facts. Because it exists, the ask endpoint has no hard dependency on an API
- * key and its behaviour is unit-testable.
+ * This is the reference implementation, not a consolation prize: it answers
+ * the same question the model is asked -- why this one and not that one --
+ * from the same facts, so the ask feature is fully testable without a network
+ * call and behaves sensibly with no API key at all.
  */
 export function templateNarrative(
   query: AskQuery,
@@ -80,35 +81,85 @@ export function templateNarrative(
     return `Nothing in the dataset matches ${query.interpretation}. Try widening the radius or dropping a filter.`;
   }
 
-  if (top.verdict.grade === "unsafe") {
-    return `Nothing looks safe ${when}. The best-scoring option, ${top.trail.name}, is still a no: ${lowerFirst(top.verdict.headline)}. Pick another day.`;
+  const scored = (report: TrailReport) =>
+    report.verdict.factors.filter(
+      (f): f is typeof f & { score: number } => f.score !== undefined,
+    );
+
+  // A veto is a different kind of answer, so it gets a different sentence.
+  const vetoed = top.verdict.factors.find((f) => f.veto);
+  if (top.verdict.grade === "unsafe" && vetoed) {
+    const alternative = reports.find((r) => r.verdict.grade !== "unsafe");
+    const redirect = alternative
+      ? ` ${alternative.trail.name} has no such problem and scores ${alternative.verdict.score ?? "?"}.`
+      : " Nothing else in range is clear either — pick another day.";
+    return `Don't go ${when}. ${top.trail.name} otherwise scores well, but ${lowerFirst(vetoed.reason)}${redirect}`;
   }
 
-  const scored = top.verdict.factors.filter(
-    (f): f is typeof f & { score: number } => f.score !== undefined,
+  const sentences: string[] = [];
+
+  const near = query.origin
+    ? ` (${Math.round(haversineMi(query.origin, top.trail))} mi from ${query.origin.label})`
+    : "";
+
+  sentences.push(
+    `${top.trail.name} in ${top.trail.region}${near} is the pick ${when} — ${gradeLabel(top.verdict.grade).toLowerCase()} at ${top.verdict.score ?? "?"}, ${top.trail.distanceMi} mi and ${top.trail.gainFt.toLocaleString()} ft of gain.`,
   );
 
-  const weakest = scored.slice().sort((a, b) => a.score - b.score)[0];
-  const strongest = scored
-    .map((f) => ({ factor: f, contribution: (f.score / 100) * f.weight }))
-    .sort((a, b) => b.contribution - a.contribution)[0];
+  /*
+   * The comparison is the part worth writing. A ranked list already says
+   * which is first; what it cannot say is what separates first from second,
+   * which is the thing that tells you whether the order matters to you.
+   */
+  const runnerUp = reports.find(
+    (r) => r.trail.id !== top.trail.id && r.verdict.grade !== "unsafe",
+  );
 
-  const near = query.origin ? ` (${Math.round(haversineMi(query.origin, top.trail))} mi from ${query.origin.label})` : "";
+  if (runnerUp) {
+    const topFactors = scored(top);
+    const upFactors = scored(runnerUp);
 
-  const sentences = [
-    `${top.trail.name} in ${top.trail.region}${near} is the pick ${when} — ${gradeLabel(top.verdict.grade).toLowerCase()} at ${top.verdict.score ?? "?"}/100, ${top.trail.distanceMi} mi and ${top.trail.gainFt.toLocaleString()} ft of gain.`,
-  ];
+    let widest: { label: string; gap: number; better: string; worse: string } | null = null;
+    for (const factor of topFactors) {
+      const counterpart = upFactors.find((f) => f.id === factor.id);
+      if (!counterpart) continue;
+      const gap = Math.abs(factor.score - counterpart.score) * factor.weight;
+      if (!widest || gap > widest.gap) {
+        widest = {
+          label: factor.label.toLowerCase(),
+          gap,
+          better: factor.score >= counterpart.score ? factor.display ?? "" : counterpart.display ?? "",
+          worse: factor.score >= counterpart.score ? counterpart.display ?? "" : factor.display ?? "",
+        };
+      }
+    }
 
-  if (weakest && weakest.score < 70) {
-    sentences.push(`The catch: ${lowerFirst(weakest.reason)}.`);
-  } else if (strongest) {
-    sentences.push(`Conditions are in your favour: ${lowerFirst(strongest.factor.reason)}.`);
+    const margin = (top.verdict.score ?? 0) - (runnerUp.verdict.score ?? 0);
+
+    if (widest && widest.gap > 2 && widest.better && widest.worse) {
+      sentences.push(
+        `It edges out ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on ${widest.label} — ${widest.better} against ${widest.worse}.`,
+      );
+    } else if (margin <= 3) {
+      sentences.push(
+        `${runnerUp.trail.name} at ${runnerUp.verdict.score ?? "?"} is effectively the same day, so take whichever is closer.`,
+      );
+    } else {
+      sentences.push(`${runnerUp.trail.name} is next at ${runnerUp.verdict.score ?? "?"}.`);
+    }
   }
 
-  const runnerUp = reports[1];
-  if (runnerUp && runnerUp.verdict.grade !== "unsafe") {
+  // Always name a downside. A recommendation with no caveat is the least
+  // useful kind, even when the day genuinely is good.
+  const weakest = scored(top).slice().sort((a, b) => a.score - b.score)[0];
+  if (weakest && weakest.score < 75) {
+    sentences.push(`Worth knowing: ${lowerFirst(weakest.reason)}.`);
+  }
+
+  const missing = top.verdict.factors.filter((f) => f.score === undefined);
+  if (missing.length > 0) {
     sentences.push(
-      `${runnerUp.trail.name} is the next best at ${runnerUp.verdict.score ?? "?"}/100 if you want something different.`,
+      `No data for ${missing.map((f) => f.label.toLowerCase()).join(" or ")}, so that is unaccounted for.`,
     );
   }
 

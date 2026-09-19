@@ -49,6 +49,24 @@ export const ACTIVITIES: Record<ActivityId, Activity> = {
       wildfire: 1.0,
     },
   },
+  fish: {
+    id: "fish",
+    label: "Fishing",
+    glyph: "\ud83c\udfa3",
+    weights: {
+      // Water temperature leads because it carries the conservation veto:
+      // a trout played in water above about 68 F often dies after release.
+      water_temp: 2.0,
+      water_flow: 1.8,
+      wind: 1.0,
+      wildfire: 1.0,
+      pressure: 0.8,
+      precipitation: 0.6,
+      air_quality: 0.6,
+      daylight: 0.6,
+      temperature: 0.5,
+    },
+  },
   climb: {
     id: "climb",
     label: "Climbing",

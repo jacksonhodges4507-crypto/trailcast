@@ -129,6 +129,35 @@ all. → [`ask/`](src/lib/ask)
 
 ---
 
+## The fishing case
+
+The same shape as the climbing rule, and the clearest example of the engine
+saying something an angler looking at a pretty river will not.
+
+Trout feed hardest between roughly 50 and 63 °F. Above about **68 °F** the
+water holds too little dissolved oxygen for a fish to recover from being
+played, and a released trout often dies anyway — which is why western states
+impose "hoot owl" restrictions closing rivers to afternoon angling during warm
+spells. So water temperature carries a hard veto, and it is not about whether
+you will catch anything. You probably will. It is about what happens to the
+fish afterwards.
+
+Water temperature and discharge come from the nearest USGS gauge within 25
+miles, and the panel says how far away that gauge is, because a reading from
+twenty miles downstream is indicative rather than authoritative. Flow is read
+together with the last 72 hours of rain, since runoff colours a river long
+before it moves the number on the gauge. Barometric trend gets a small weight:
+the effect is real but modest, and weighting it like the temperature would be
+dressing folklore up as physics.
+
+**A note on the endpoint.** The `waterservices.usgs.gov/nwis` service that
+almost every tutorial still demonstrates now answers 503 — USGS has been
+retiring it. This uses their current OGC API at `api.waterdata.usgs.gov`
+instead, which is a decent reminder that "it worked in the example" and "it
+works today" are different claims.
+
+---
+
 ## The climbing case
 
 The clearest example of why per-trail attributes beat a forecast.
@@ -186,6 +215,7 @@ cells at a time, and returns `scored` and `available` so the UI can say
 | [Open-Meteo](https://open-meteo.com/) | temperature, precipitation + 72 h history, wind, gusts, snow depth, daylight | no |
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | US AQI, PM2.5 (daytime peak) | no |
 | [NIFC WFIGS](https://data-nifc.opendata.arcgis.com/) | active wildfire perimeters within 35 mi | no |
+| [USGS Water Data](https://waterdata.usgs.gov/) | streamflow and water temperature at the nearest gauge | no |
 | [OpenFreeMap](https://openfreemap.org/) | basemap tiles | no |
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
 | [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported, not live) | no |

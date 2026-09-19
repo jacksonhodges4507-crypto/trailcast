@@ -3,9 +3,12 @@ import { scoreTrail, compareVerdicts, gradeFor, estimateHours } from "@/lib/scor
 import {
   airQualityRule,
   precipitationRule,
+  pressureRule,
   rockRule,
   surfaceRule,
   temperatureRule,
+  waterFlowRule,
+  waterTempRule,
   windRule,
 } from "@/lib/scoring/rules";
 import { goodConditions, trail } from "./fixtures";
@@ -439,5 +442,110 @@ describe("factor presentation", () => {
     const fine = scoreTrail(trail(), goodConditions(), "hike");
     const grim = scoreTrail(trail(), goodConditions({ tempMaxF: 99, usAqi: 180 }), "hike");
     expect(fine.factors.map((f) => f.id)).toEqual(grim.factors.map((f) => f.id));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fishing
+// ---------------------------------------------------------------------------
+
+describe("water temperature rule", () => {
+  it("vetoes above the temperature where released trout die", () => {
+    const factor = waterTempRule({
+      trail: trail(),
+      conditions: goodConditions({ waterTempF: 70 }),
+      activity: "fish",
+    });
+    expect(factor.veto).toBe(true);
+    expect(factor.reason.toLowerCase()).toContain("release");
+  });
+
+  it("rates the feeding band highest", () => {
+    const factor = waterTempRule({
+      trail: trail(),
+      conditions: goodConditions({ waterTempF: 56 }),
+      activity: "fish",
+    });
+    expect(factor.score).toBe(100);
+    expect(factor.veto).toBeFalsy();
+  });
+
+  it("marks cold water down without vetoing it", () => {
+    const factor = waterTempRule({
+      trail: trail(),
+      conditions: goodConditions({ waterTempF: 38 }),
+      activity: "fish",
+    });
+    expect(factor.score ?? 100).toBeLessThan(80);
+    expect(factor.veto).toBeFalsy();
+  });
+
+  it("reports no data rather than guessing when no gauge is in range", () => {
+    const factor = waterTempRule({
+      trail: trail(),
+      conditions: goodConditions({ waterTempF: undefined }),
+      activity: "fish",
+    });
+    expect(factor.score).toBeUndefined();
+    expect(factor.missingReason).toBeTruthy();
+  });
+
+  it("makes the warm-water veto decide the whole verdict", () => {
+    const verdict = scoreTrail(trail(), goodConditions({ waterTempF: 71 }), "fish");
+    expect(verdict.grade).toBe("unsafe");
+  });
+});
+
+describe("flow and clarity rule", () => {
+  it("reads recent rain as colour in the water", () => {
+    const clear = waterFlowRule({
+      trail: trail(),
+      conditions: goodConditions({ streamflowCfs: 120, precipitationPrior72hIn: 0 }),
+      activity: "fish",
+    });
+    const blown = waterFlowRule({
+      trail: trail(),
+      conditions: goodConditions({ streamflowCfs: 120, precipitationPrior72hIn: 0.9 }),
+      activity: "fish",
+    });
+    expect(blown.score ?? 100).toBeLessThan(clear.score ?? 0);
+    expect(blown.reason).toContain("coloured");
+  });
+
+  it("flags very low water", () => {
+    const factor = waterFlowRule({
+      trail: trail(),
+      conditions: goodConditions({ streamflowCfs: 4, precipitationPrior72hIn: 0 }),
+      activity: "fish",
+    });
+    expect(factor.reason).toContain("low flow");
+  });
+});
+
+describe("barometric trend rule", () => {
+  it("prefers falling pressure to rising", () => {
+    const falling = pressureRule({
+      trail: trail(),
+      conditions: goodConditions({ pressureChangeHpa: -4 }),
+      activity: "fish",
+    });
+    const rising = pressureRule({
+      trail: trail(),
+      conditions: goodConditions({ pressureChangeHpa: 6 }),
+      activity: "fish",
+    });
+    expect(falling.score ?? 0).toBeGreaterThan(rising.score ?? 100);
+    expect(falling.score).toBe(100);
+  });
+});
+
+describe("fishing profile", () => {
+  it("leads with water temperature, the factor carrying the veto", () => {
+    const verdict = scoreTrail(
+      trail(),
+      goodConditions({ waterTempF: 55, streamflowCfs: 90, pressureChangeHpa: -2 }),
+      "fish",
+    );
+    expect(verdict.factors[0]?.id).toBe("water_temp");
   });
 });

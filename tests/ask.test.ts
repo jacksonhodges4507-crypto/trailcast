@@ -123,7 +123,8 @@ describe("templateNarrative", () => {
       { trail: t, conditions, verdict: scoreTrail(t, conditions, "hike") },
     ];
     const narrative = templateNarrative(query, reports, TODAY);
-    expect(narrative.toLowerCase()).toContain("nothing looks safe");
+    expect(narrative.toLowerCase()).toContain("don't go");
+    expect(narrative).toContain("Windy Ridge");
   });
 });
 

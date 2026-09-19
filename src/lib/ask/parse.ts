@@ -7,6 +7,7 @@ const ACTIVITY_PATTERNS: [ActivityId, RegExp][] = [
   ["mtb", /\b(mtb|mountain bik\w*|bike|biking|ride|riding|singletrack)\b/],
   ["trail_run", /\b(run|running|jog\w*|trail run\w*)\b/],
   ["climb", /\b(climb\w*|crag\w*|bouldering|sport climb\w*)\b/],
+  ["fish", /\b(fish|fishes|fishing|fisher\w*|angler|angling|fly\s?fish\w*|trout)\b/],
   ["hike", /\b(hike|hiking|hikes|walk|trek\w*|summit|peak)\b/],
 ];
 

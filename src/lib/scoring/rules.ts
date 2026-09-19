@@ -65,6 +65,7 @@ const COMFORT_BAND: Record<ActivityId, [number, number]> = {
   trail_run: [35, 62],
   mtb: [40, 72],
   climb: [32, 60],
+  fish: [40, 78],
 };
 
 /** How steeply each activity degrades above its band. */
@@ -73,6 +74,7 @@ const HEAT_SLOPE: Record<ActivityId, number> = {
   trail_run: 3.8,
   mtb: 3.0,
   climb: 3.6,
+  fish: 2.4,
 };
 
 /**
@@ -256,6 +258,7 @@ const PACE_MPH: Record<ActivityId, number> = {
   trail_run: 5.0,
   mtb: 6.5,
   climb: 1.0,
+  fish: 1.5,
 };
 
 /**
@@ -486,6 +489,148 @@ export const rockRule: Rule = ({ trail, conditions }) => {
 };
 
 // ---------------------------------------------------------------------------
+// Water (fishing only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Water temperature, and the rule that matters most here.
+ *
+ * Trout feed best in the low 50s to low 60s F. Above about 68 F, warm water
+ * holds too little dissolved oxygen for a fish to recover from being played,
+ * and a released trout frequently dies anyway. Western states impose "hoot
+ * owl" restrictions on exactly this basis, closing rivers to afternoon
+ * angling during warm spells.
+ *
+ * So this veto is not about whether you will catch anything. You probably
+ * will. It is about what happens to the fish afterwards, which is the sort of
+ * judgement a conditions app is well placed to make and an angler staring at
+ * a pretty river is not.
+ */
+export const waterTempRule: Rule = ({ conditions }) => {
+  const temp = conditions.waterTempF;
+  if (temp === undefined) {
+    return missing(
+      "water_temp",
+      "Water temperature",
+      "No gauge reporting water temperature within 25 mi",
+    );
+  }
+
+  let score: number;
+  if (temp >= 50 && temp <= 63) score = 100;
+  else if (temp > 63) score = clamp(100 - (temp - 63) * 12);
+  else score = clamp(100 - (50 - temp) * 3.5);
+
+  const veto = temp >= 68;
+
+  let reason: string;
+  if (veto) {
+    reason = `${round(temp)} \u00b0F is too warm to fish ethically \u2014 trout played in water this warm often die after release. Fish at dawn or find higher, colder water.`;
+  } else if (temp >= 65) {
+    reason = `${round(temp)} \u00b0F and climbing; fish early and release quickly`;
+  } else if (temp < 42) {
+    reason = `${round(temp)} \u00b0F \u2014 cold and slow; fish deep and expect a short window`;
+  } else {
+    reason = `${round(temp)} \u00b0F, in the band trout feed hardest in`;
+  }
+
+  return {
+    id: "water_temp",
+    label: "Water temperature",
+    score,
+    weight: 0,
+    display: `${round(temp)} \u00b0F`,
+    reason,
+    veto,
+    sources: collect(conditions, ["waterTempF"]),
+  };
+};
+
+/**
+ * Flow and clarity.
+ *
+ * A gauge gives discharge but not turbidity, and turbidity is what actually
+ * ruins a day. Recent rain is the best proxy available: runoff colours a
+ * river long before it changes the number on the gauge, so the two are read
+ * together rather than the flow figure being trusted alone.
+ */
+export const waterFlowRule: Rule = ({ conditions }) => {
+  const flow = conditions.streamflowCfs;
+  const recentRain = conditions.precipitationPrior72hIn;
+
+  if (flow === undefined && recentRain === undefined) {
+    return missing("water_flow", "Flow and clarity", "No gauge or rainfall history available");
+  }
+
+  let score = 100;
+  const notes: string[] = [];
+
+  if (recentRain !== undefined) {
+    // Heavy recent rain means off-colour water whatever the gauge says.
+    score -= Math.min(70, recentRain * 90);
+    if (recentRain > 0.6) notes.push(`${recentRain.toFixed(2)}" of rain in 72 h will have coloured it`);
+    else if (recentRain > 0.2) notes.push(`${recentRain.toFixed(2)}" of recent rain; expect some stain`);
+  }
+
+  if (flow !== undefined) {
+    if (flow < 10) {
+      score -= 25;
+      notes.push(`very low flow at ${flow.toFixed(0)} cfs \u2014 spooky fish, wade carefully`);
+    } else {
+      notes.push(`${flow.toFixed(0)} cfs at the nearest gauge`);
+    }
+  }
+
+  const gauge = conditions.gaugeDistanceMi;
+  if (flow !== undefined && gauge !== undefined && gauge > 12) {
+    notes.push(`gauge is ${gauge.toFixed(0)} mi off, so treat it as indicative`);
+  }
+
+  return {
+    id: "water_flow",
+    label: "Flow and clarity",
+    score: clamp(score),
+    weight: 0,
+    display: flow !== undefined ? `${flow.toFixed(0)} cfs` : `${(recentRain ?? 0).toFixed(2)}" rain`,
+    reason: notes.length > 0 ? notes.join("; ") : "Stable water",
+    sources: collect(conditions, ["streamflowCfs", "precipitationPrior72hIn"]),
+  };
+};
+
+/**
+ * Barometric trend. Falling pressure ahead of a front is the classic feeding
+ * window; a sharp rise behind one is the classic dead day. The effect is real
+ * but modest, which is why it carries a small weight rather than a veto.
+ */
+export const pressureRule: Rule = ({ conditions }) => {
+  const change = conditions.pressureChangeHpa;
+  if (change === undefined) {
+    return missing("pressure", "Barometric trend", "No pressure history available");
+  }
+
+  let score: number;
+  if (change <= -3) score = 100;
+  else if (change < 0) score = between(change, 0, -3, 72, 100);
+  else score = clamp(72 - change * 7);
+
+  let reason: string;
+  if (change <= -3) reason = `Falling hard (${change.toFixed(1)} hPa in 24 h) \u2014 prime feeding window`;
+  else if (change < -0.5) reason = `Easing off (${change.toFixed(1)} hPa) \u2014 a good sign`;
+  else if (change > 4) reason = `Rising sharply (+${change.toFixed(1)} hPa) behind a front; expect a slow bite`;
+  else reason = `Steady (${change >= 0 ? "+" : ""}${change.toFixed(1)} hPa)`;
+
+  return {
+    id: "pressure",
+    label: "Barometric trend",
+    score,
+    weight: 0,
+    display: `${change >= 0 ? "+" : ""}${change.toFixed(1)} hPa`,
+    reason,
+    sources: collect(conditions, ["pressureChangeHpa", "pressureHpa"]),
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Wildfire
 // ---------------------------------------------------------------------------
 
@@ -541,5 +686,8 @@ export const RULES: Record<FactorId, Rule> = {
   daylight: daylightRule,
   surface: surfaceRule,
   rock: rockRule,
+  water_temp: waterTempRule,
+  water_flow: waterFlowRule,
+  pressure: pressureRule,
   wildfire: wildfireRule,
 };
