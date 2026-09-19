@@ -432,7 +432,10 @@ describe("factor presentation", () => {
     expect(riding.factors[0]?.id).toBe("surface");
   });
 
-  it("keeps the ordering stable regardless of the day's conditions", () => {
+  it("keeps the ordering identical regardless of the day's conditions", () => {
+    // Several factors carry equal weight for hiking. Ties must break on a
+    // fixed order rather than on score, or the panel reshuffles with the
+    // weather and the reader loses the place they learned.
     const fine = scoreTrail(trail(), goodConditions(), "hike");
     const grim = scoreTrail(trail(), goodConditions({ tempMaxF: 99, usAqi: 180 }), "hike");
     expect(fine.factors.map((f) => f.id)).toEqual(grim.factors.map((f) => f.id));

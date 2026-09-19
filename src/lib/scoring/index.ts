@@ -13,6 +13,18 @@ import { RULES } from "./rules";
 
 export { estimateHours } from "./rules";
 
+/** Canonical presentation order, used only to break weight ties. */
+const FACTOR_ORDER: FactorId[] = [
+  "temperature",
+  "precipitation",
+  "wind",
+  "rock",
+  "surface",
+  "air_quality",
+  "daylight",
+  "wildfire",
+];
+
 const GRADE_LABEL: Record<Grade, string> = {
   prime: "Prime",
   good: "Good",
@@ -97,7 +109,12 @@ export function scoreTrail(
   factors.sort((a, b) => {
     const byWeight = b.weight - a.weight;
     if (Math.abs(byWeight) > 0.0001) return byWeight;
-    return (a.score ?? 101) - (b.score ?? 101);
+    // Ties break on a fixed order, never on today's scores. Several factors
+    // carry equal weight for hiking, and breaking those ties by score made
+    // the list reshuffle as the weather changed -- mostly stable, but not
+    // quite, which is worse than either. The rating colours already say what
+    // is wrong today; the ordering's job is to be predictable.
+    return FACTOR_ORDER.indexOf(a.id) - FACTOR_ORDER.indexOf(b.id);
   });
 
   const hasVeto = factors.some((f) => f.veto === true);
