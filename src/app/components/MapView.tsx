@@ -18,7 +18,38 @@ import { GRADE_COLOR } from "./grade";
 
 const MAPLIBRE_JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css";
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+/**
+ * A raster basemap defined inline, rather than a hosted vector style.
+ *
+ * The previous choice was a vector style whose JSON, sprites and TileJSON all
+ * fetched with 200s -- and then the map sat blank forever, firing neither
+ * `load` nor `error`. A vector basemap has a lot of surface to fail on: a
+ * 111-layer style document, a sprite sheet, glyph ranges, and tile parsing in
+ * a worker, any of which can stall silently.
+ *
+ * This app draws pins on a backdrop. It does not need vector styling, so it
+ * does not need that surface. Raster tiles are one request each, rendered
+ * directly, with the style defined here so there is no style document to
+ * fetch at all.
+ */
+const BASEMAP_STYLE = {
+  version: 8,
+  sources: {
+    basemap: {
+      type: "raster",
+      tiles: [
+        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+      ],
+      tileSize: 256,
+      maxzoom: 20,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    },
+  },
+  layers: [{ id: "basemap", type: "raster", source: "basemap" }],
+} as const;
 
 /** How long the basemap gets before we call it a failure. */
 const LOAD_DEADLINE_MS = 9000;
@@ -118,7 +149,7 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
         const map = new maplibregl.Map({
           container: containerRef.current,
-          style: STYLE_URL,
+          style: BASEMAP_STYLE,
           center: [-111.7, 40.5],
           zoom: 7.4,
           attributionControl: { compact: true },
