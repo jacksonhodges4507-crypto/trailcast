@@ -379,12 +379,12 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
   // moves with it is how a user stops trusting the number.
   const rutNote =
     activity === "mtb" && wetness > 0.25 && snowIn <= 1
-      ? " Riding it wet will cut ruts that last a season."
+      ? "Riding it wet will cut ruts that last a season"
       : "";
 
   const waterNote =
     trail.waterCrossings > 0 && (prior ?? 0) > 0.5
-      ? ` ${trail.waterCrossings} stream crossing${trail.waterCrossings > 1 ? "s" : ""} will be running high.`
+      ? `${trail.waterCrossings} stream crossing${trail.waterCrossings > 1 ? "s" : ""} will be running high`
       : "";
 
   return {
@@ -393,7 +393,9 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
     score,
     weight: 0,
     display: surfaceState(snowIn, wetness),
-    reason: reason + rutNote + waterNote,
+    // Joined as sentences. Concatenating the notes directly produced
+    // "Dry and firm rock 1 stream crossing will be running high".
+    reason: [reason, rutNote, waterNote].filter((part) => part.length > 0).join(". "),
     sources: collect(conditions, ["precipitationPrior72hIn", "snowDepthIn"]),
   };
 };

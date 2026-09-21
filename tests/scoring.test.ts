@@ -634,3 +634,15 @@ describe("wildfire at range", () => {
     expect(factor.veto).toBe(true);
   });
 });
+
+describe("surface explanation", () => {
+  it("separates its notes into sentences", () => {
+    const factor = surfaceRule({
+      trail: trail({ surface: "rock", waterCrossings: 1 }),
+      conditions: goodConditions({ precipitationPrior72hIn: 0.9 }),
+      activity: "hike",
+    });
+    // Previously rendered as "Dry and firm rock 1 stream crossing ...".
+    expect(factor.reason).toMatch(/\. 1 stream crossing will be running high/);
+  });
+});
