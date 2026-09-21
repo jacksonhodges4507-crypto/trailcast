@@ -148,9 +148,9 @@ export const precipitationRule: Rule = ({ trail, conditions, activity }) => {
   const veto = trail.exposed && inches >= 1.0;
 
   let reason: string;
-  if (veto) reason = `${inches.toFixed(2)}" forecast on fully exposed terrain — flash flood and lightning risk`;
-  else if (inches >= 0.3) reason = `Wet: ${inches.toFixed(2)}" expected, ${round(pct)}% chance`;
-  else if (pct >= 50) reason = `${round(pct)}% chance of showers, ${inches.toFixed(2)}" expected`;
+  if (veto) reason = `${inches.toFixed(2)} in of rain forecast on fully exposed terrain — flash flood and lightning risk`;
+  else if (inches >= 0.3) reason = `Wet: ${inches.toFixed(2)} in of rain expected, ${round(pct)}% chance`;
+  else if (pct >= 50) reason = `${round(pct)}% chance of showers, ${inches.toFixed(2)} in expected`;
   else if (pct >= 20) reason = `Slight chance of showers (${round(pct)}%)`;
   else reason = "Dry";
 
@@ -159,7 +159,7 @@ export const precipitationRule: Rule = ({ trail, conditions, activity }) => {
     label: "Precipitation",
     score,
     weight: 0,
-    display: inches >= 0.01 ? `${inches.toFixed(2)}" · ${round(pct)}%` : `${round(pct)}% chance`,
+    display: inches >= 0.01 ? `${inches.toFixed(2)} in · ${round(pct)}%` : `${round(pct)}% chance`,
     reason,
     veto,
     sources: collect(conditions, ["precipitationIn", "precipitationChancePct"]),
@@ -327,6 +327,22 @@ const ASPECT_DRYING: Record<Trail["aspect"], number> = {
 };
 
 /**
+ * The surface reading, as the condition rather than its cause.
+ *
+ * It used to show the rain total ("0.41 in 72 h"), which is the input, not
+ * the answer: nobody standing at a trailhead wants a rainfall figure to decode,
+ * they want to know whether it is muddy. The figure moves to the explanation,
+ * where there is room to say what it means.
+ */
+function surfaceState(snowIn: number, wetness: number): string {
+  if (snowIn > 6) return `snow, ${snowIn.toFixed(0)} in`;
+  if (snowIn > 1) return "patchy snow";
+  if (wetness > 0.5) return "muddy";
+  if (wetness > 0.2) return "tacky";
+  return "dry";
+}
+
+/**
  * The factor a generic forecast cannot produce: it needs the trail's own
  * soil and aspect. Riding wet clay is how trail networks get rutted for a
  * season, so mountain biking weights this highest of any activity.
@@ -352,10 +368,10 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
   if (activity === "mtb" && wetness > 0.25) score = clamp(score - 15);
 
   let reason: string;
-  if (snowIn > 6) reason = `${snowIn.toFixed(0)}" of snow on the ground; expect postholing`;
-  else if (snowIn > 1) reason = `${snowIn.toFixed(1)}" of lingering snow on a ${trail.aspect}-facing route`;
-  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)}" of rain in 72 h on ${trail.surface} — likely muddy`;
-  else if (wetness > 0.2) reason = `Some moisture from ${(prior ?? 0).toFixed(2)}" of recent rain; tacky in places`;
+  if (snowIn > 6) reason = `${snowIn.toFixed(0)} in of snow on the ground; expect postholing`;
+  else if (snowIn > 1) reason = `${snowIn.toFixed(1)} in of lingering snow on a ${trail.aspect}-facing route`;
+  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days on ${trail.surface} — likely muddy`;
+  else if (wetness > 0.2) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days; tacky in places`;
   else reason = `Dry and firm ${trail.surface}`;
 
   // The riding penalty above fires at wetness > 0.25, so the explanation has
@@ -376,7 +392,7 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
     label: "Trail surface",
     score,
     weight: 0,
-    display: snowIn > 1 ? `${snowIn.toFixed(1)}" snow` : `${(prior ?? 0).toFixed(2)}" in 72 h`,
+    display: surfaceState(snowIn, wetness),
     reason: reason + rutNote + waterNote,
     sources: collect(conditions, ["precipitationPrior72hIn", "snowDepthIn"]),
   };
@@ -436,7 +452,7 @@ export const rockRule: Rule = ({ trail, conditions }) => {
       label: "Rock condition",
       score: 0,
       weight: 0,
-      display: `${todayRain.toFixed(2)}" today`,
+      display: `${todayRain.toFixed(2)} in today`,
       reason: `Rain forecast today — ${spec.label} will be wet${rock === "sandstone" ? "; climbing saturated sandstone breaks holds" : ""}`,
       veto: rock === "sandstone",
       sources: collect(conditions, ["precipitationIn", "hoursSincePrecip"]),
@@ -568,8 +584,8 @@ export const waterFlowRule: Rule = ({ conditions }) => {
   if (recentRain !== undefined) {
     // Heavy recent rain means off-colour water whatever the gauge says.
     score -= Math.min(70, recentRain * 90);
-    if (recentRain > 0.6) notes.push(`${recentRain.toFixed(2)}" of rain in 72 h will have coloured it`);
-    else if (recentRain > 0.2) notes.push(`${recentRain.toFixed(2)}" of recent rain; expect some stain`);
+    if (recentRain > 0.6) notes.push(`${recentRain.toFixed(2)} in of rain over the last 3 days will have coloured it`);
+    else if (recentRain > 0.2) notes.push(`${recentRain.toFixed(2)} in of recent rain; expect some stain`);
   }
 
   if (flow !== undefined) {
@@ -591,7 +607,7 @@ export const waterFlowRule: Rule = ({ conditions }) => {
     label: "Flow and clarity",
     score: clamp(score),
     weight: 0,
-    display: flow !== undefined ? `${flow.toFixed(0)} cfs` : `${(recentRain ?? 0).toFixed(2)}" rain`,
+    display: flow !== undefined ? `${flow.toFixed(0)} cfs` : `${(recentRain ?? 0).toFixed(2)} in rain`,
     reason: notes.length > 0 ? notes.join("; ") : "Stable water",
     sources: collect(conditions, ["streamflowCfs", "precipitationPrior72hIn"]),
   };
@@ -634,11 +650,24 @@ export const pressureRule: Rule = ({ conditions }) => {
 // Wildfire
 // ---------------------------------------------------------------------------
 
+/**
+ * Wildfire, read together with air quality.
+ *
+ * Distance alone is a poor proxy for whether a fire affects your day. A fire
+ * four miles away means closures regardless of wind; a fire ninety miles away
+ * matters only if its smoke is reaching you. Air quality measures that
+ * directly, so this rule scores distant fires gently and lets the AQI factor
+ * carry the smoke itself -- scoring both heavily would count the same smoke
+ * twice. What this rule adds is the *explanation*: when the air is bad and
+ * there is a fire in range, it says which fire is the likely cause.
+ */
 export const wildfireRule: Rule = ({ conditions }) => {
   const fires = conditions.wildfires;
   if (fires === undefined) {
     return missing("wildfire", "Wildfire", "No wildfire perimeter data available");
   }
+
+  const aqi = conditions.usAqi;
 
   if (fires.length === 0) {
     return {
@@ -646,8 +675,8 @@ export const wildfireRule: Rule = ({ conditions }) => {
       label: "Wildfire",
       score: 100,
       weight: 0,
-      display: "none within 35 mi",
-      reason: "No active fire perimeters nearby",
+      display: "none within 100 mi",
+      reason: "No active fire perimeters within 100 miles",
       sources: collect(conditions, ["wildfires"]),
     };
   }
@@ -658,13 +687,28 @@ export const wildfireRule: Rule = ({ conditions }) => {
   }
 
   const distance = nearest.distanceMi;
-  const score = between(distance, 2, 35, 0, 95);
+
+  let score: number;
+  if (distance <= 5) score = 0;
+  else if (distance <= 15) score = between(distance, 5, 15, 15, 45);
+  else if (distance <= 40) score = between(distance, 15, 40, 45, 80);
+  else score = between(distance, 40, 100, 80, 95);
+
   const veto = distance <= 5;
   const acres = nearest.acres !== undefined ? ` (~${nearest.acres.toLocaleString()} acres)` : "";
+  const others = fires.length > 1 ? `, plus ${fires.length - 1} more in range` : "";
 
-  const reason = veto
-    ? `${nearest.name} fire ${distance.toFixed(1)} mi away${acres} — expect closures`
-    : `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}; smoke possible`;
+  let reason: string;
+  if (veto) {
+    reason = `${nearest.name} fire ${distance.toFixed(1)} mi away${acres} \u2014 expect closures and evacuations`;
+  } else if (aqi !== undefined && aqi > 100) {
+    // The cross-factor sentence is the point of reading these together.
+    reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; with AQI at ${Math.round(aqi)}, its smoke is likely what you are breathing`;
+  } else if (aqi !== undefined) {
+    reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; air is clean for now (AQI ${Math.round(aqi)}), but that can change with the wind`;
+  } else {
+    reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; smoke possible depending on wind`;
+  }
 
   return {
     id: "wildfire",
@@ -674,7 +718,7 @@ export const wildfireRule: Rule = ({ conditions }) => {
     display: `${distance.toFixed(0)} mi away`,
     reason,
     veto,
-    sources: collect(conditions, ["wildfires"]),
+    sources: collect(conditions, ["wildfires", "usAqi"]),
   };
 };
 

@@ -122,7 +122,7 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
 
         {conditions.wildfires && conditions.wildfires.length > 0 ? (
           <div className="sources">
-            <h3>Active fires within 35 mi</h3>
+            <h3>Active fires within 100 mi</h3>
             {conditions.wildfires.slice(0, 4).map((fire) => (
               <div className="source-item" key={`${fire.name}-${fire.distanceMi}`}>
                 {fire.name} — {fire.distanceMi} mi

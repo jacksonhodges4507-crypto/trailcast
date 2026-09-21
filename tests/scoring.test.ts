@@ -9,6 +9,7 @@ import {
   temperatureRule,
   waterFlowRule,
   waterTempRule,
+  wildfireRule,
   windRule,
 } from "@/lib/scoring/rules";
 import { goodConditions, trail } from "./fixtures";
@@ -547,5 +548,89 @@ describe("fishing profile", () => {
       "fish",
     );
     expect(verdict.factors[0]?.id).toBe("water_temp");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Readability fixes from use
+// ---------------------------------------------------------------------------
+
+describe("surface reading", () => {
+  it("shows the condition, not a rain total to decode", () => {
+    const dry = surfaceRule({ trail: trail(), conditions: goodConditions(), activity: "hike" });
+    const muddy = surfaceRule({
+      trail: trail({ surface: "clay", aspect: "N" }),
+      conditions: goodConditions({ precipitationPrior72hIn: 0.8 }),
+      activity: "hike",
+    });
+    expect(dry.display).toBe("dry");
+    expect(muddy.display).toBe("muddy");
+  });
+
+  it("keeps the rain figure in the explanation, in plain units", () => {
+    const factor = surfaceRule({
+      trail: trail({ surface: "clay", aspect: "N" }),
+      conditions: goodConditions({ precipitationPrior72hIn: 0.8 }),
+      activity: "hike",
+    });
+    expect(factor.reason).toContain("0.80 in of rain over the last 3 days");
+  });
+});
+
+describe("unit rendering", () => {
+  it("never uses a bare double-quote as an inch mark", () => {
+    // On screen, 0.41" reads as a stray quotation mark rather than inches.
+    const wet = goodConditions({
+      precipitationIn: 0.4,
+      precipitationChancePct: 70,
+      precipitationPrior72hIn: 0.9,
+      snowDepthIn: 3,
+    });
+    const verdict = scoreTrail(trail({ surface: "clay" }), wet, "hike");
+    for (const factor of verdict.factors) {
+      expect(factor.display ?? "").not.toMatch(/\d"/);
+      expect(factor.reason).not.toMatch(/\d"/);
+    }
+  });
+});
+
+describe("wildfire at range", () => {
+  const fire = (distanceMi: number) => [{ name: "Test Ridge", distanceMi, acres: 4000 }];
+
+  it("counts a fire 90 miles out, gently", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(90) }),
+      activity: "hike",
+    });
+    expect(factor.score ?? 0).toBeGreaterThan(80);
+    expect(factor.veto).toBeFalsy();
+  });
+
+  it("blames a fire in range when the air is actually bad", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(60), usAqi: 160 }),
+      activity: "hike",
+    });
+    expect(factor.reason).toContain("smoke is likely what you are breathing");
+  });
+
+  it("says the air is clean when a distant fire is not reaching you", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(60), usAqi: 32 }),
+      activity: "hike",
+    });
+    expect(factor.reason).toContain("air is clean for now");
+  });
+
+  it("still vetoes a fire on the doorstep", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(3) }),
+      activity: "hike",
+    });
+    expect(factor.veto).toBe(true);
   });
 });

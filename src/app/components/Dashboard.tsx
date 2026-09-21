@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MapView from "./MapView";
 import TrailDetail from "./TrailDetail";
 import AskBar from "./AskBar";
+import ThemeToggle from "./ThemeToggle";
 import { GRADE_CLASS, GRADE_TEXT } from "./grade";
 import { ACTIVITIES, ACTIVITY_IDS } from "@/lib/activities";
 import { forecastWindow, relativeLabel, weekdayName } from "@/lib/dates";
@@ -114,6 +115,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             </span>
           ) : null}
           <SourceChips status={data.sourceStatus} degraded={data.degraded} />
+          <ThemeToggle />
         </div>
       </header>
 
@@ -224,19 +226,19 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
           <div className="legend">
             <span>
-              <span className="dot" style={{ background: "#2e8b57" }} /> prime
+              <span className="dot" style={{ background: "var(--grade-prime)" }} /> prime
             </span>
             <span>
-              <span className="dot" style={{ background: "#5e8c3a" }} /> good
+              <span className="dot" style={{ background: "var(--grade-good)" }} /> good
             </span>
             <span>
-              <span className="dot" style={{ background: "#c08a1e" }} /> marginal
+              <span className="dot" style={{ background: "var(--grade-marginal)" }} /> marginal
             </span>
             <span>
-              <span className="dot" style={{ background: "#bf6b2e" }} /> poor
+              <span className="dot" style={{ background: "var(--grade-poor)" }} /> poor
             </span>
             <span>
-              <span className="dot" style={{ background: "#a8402c" }} /> no-go
+              <span className="dot" style={{ background: "var(--grade-unsafe)" }} /> no-go
             </span>
             <span style={{ opacity: 0.7 }}>
               {relativeLabel(date, today)} · {ACTIVITIES[activity].label.toLowerCase()}

@@ -1,11 +1,15 @@
 import type { Grade } from "@/lib/types";
 
+/*
+ * CSS variables rather than hex values, so the pins, rating steps and legend
+ * all follow the active theme without the component knowing there is one.
+ */
 export const GRADE_COLOR: Record<Grade, string> = {
-  prime: "#2e8b57",
-  good: "#5e8c3a",
-  marginal: "#c08a1e",
-  poor: "#bf6b2e",
-  unsafe: "#a8402c",
+  prime: "var(--grade-prime)",
+  good: "var(--grade-good)",
+  marginal: "var(--grade-marginal)",
+  poor: "var(--grade-poor)",
+  unsafe: "var(--grade-unsafe)",
 };
 
 export const GRADE_CLASS: Record<Grade, string> = {
@@ -26,7 +30,7 @@ export const GRADE_TEXT: Record<Grade, string> = {
 
 /** Colour a 0-100 score on the same scale the grades use. */
 export function scoreColor(score: number | undefined, grade: Grade): string {
-  if (score === undefined) return "#647a72";
+  if (score === undefined) return "var(--text-faint)";
   return GRADE_COLOR[grade];
 }
 
@@ -51,11 +55,11 @@ export function ratingFor(score: number): Rating {
 }
 
 export const RATING_COLOR: Record<Rating, string> = {
-  excellent: "#2e8b57",
-  good: "#5e8c3a",
-  fair: "#c08a1e",
-  poor: "#bf6b2e",
-  critical: "#a8402c",
+  excellent: "var(--grade-prime)",
+  good: "var(--grade-good)",
+  fair: "var(--grade-marginal)",
+  poor: "var(--grade-poor)",
+  critical: "var(--grade-unsafe)",
 };
 
 /** Filled segments out of five. */

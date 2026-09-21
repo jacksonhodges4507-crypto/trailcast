@@ -10,8 +10,15 @@ import { bboxAround, haversineMi } from "../geo";
 const ENDPOINT =
   "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query";
 
-/** How far away a fire still matters for smoke, closures and detours. */
-export const ALERT_RADIUS_MI = 35;
+/**
+ * How far away a fire is worth knowing about.
+ *
+ * This was 35 miles, which covers closures and detours but not smoke, and
+ * smoke is often the thing that actually decides whether a day outside is
+ * worth it. A large fire 80 miles upwind can put a whole valley into
+ * unhealthy air. 100 miles catches those.
+ */
+export const ALERT_RADIUS_MI = 100;
 
 function firstString(
   attrs: Record<string, unknown>,
@@ -87,7 +94,7 @@ export const wildfireAdapter: SourceAdapter = {
       outFields: "*",
       returnGeometry: "true",
       outSR: "4326",
-      resultRecordCount: "25",
+      resultRecordCount: "60",
       f: "geojson",
     });
     const url = `${ENDPOINT}?${params.toString()}`;

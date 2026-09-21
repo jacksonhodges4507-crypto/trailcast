@@ -37,12 +37,108 @@
   --radius: 10px;
   --radius-lg: 16px;
 
-  --shadow: 0 1px 2px rgba(42, 51, 44, 0.06), 0 10px 28px rgba(42, 51, 44, 0.1);
+  --shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.06), 0 10px 28px rgba(var(--shadow-rgb), 0.1);
+  --shadow-rgb: 42, 51, 44;
+
+  /* Text on a filled accent button, and the floating map overlays. */
+  --on-accent: #ffffff;
+  --overlay-bg: rgba(255, 253, 248, 0.95);
+  --banner-bg: #fbeae6;
+  --banner-border: #f0cfc7;
+
+  /* The basemap is drawn light; this leaves it alone in light mode. */
+  --map-filter: none;
+
+  color-scheme: light;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
+}
+
+/*
+ * Dark mode: the same field palette at night, not a return to neon on black.
+ * An explicit choice (data-theme) wins; otherwise the system preference does.
+ */
+:root[data-theme="dark"] {
+  --bg: #171a16;
+  --bg-elevated: #1e221c;
+  --surface: #232820;
+  --surface-hover: #2b3128;
+  --border: #333a30;
+  --border-strong: #465042;
+
+  --text: #e4e7df;
+  --text-muted: #a7af9f;
+  --text-faint: #7a8372;
+
+  --accent: #86c29c;
+  --accent-dim: #253329;
+
+  --grade-prime: #5cb886;
+  --grade-good: #93b865;
+  --grade-marginal: #dcaa48;
+  --grade-poor: #df8f55;
+  --grade-unsafe: #e06d55;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-rgb: 0, 0, 0;
+
+  --on-accent: #14201a;
+  --overlay-bg: rgba(30, 34, 28, 0.94);
+  --banner-bg: #3a2420;
+  --banner-border: #5a332c;
+
+  /*
+   * The basemap tiles are drawn light and there is no keyless dark style, so
+   * the canvas is inverted and hue-rotated back. Pins are DOM elements, not
+   * canvas pixels, so they keep their true grade colours.
+   */
+  --map-filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --bg: #171a16;
+  --bg-elevated: #1e221c;
+  --surface: #232820;
+  --surface-hover: #2b3128;
+  --border: #333a30;
+  --border-strong: #465042;
+
+  --text: #e4e7df;
+  --text-muted: #a7af9f;
+  --text-faint: #7a8372;
+
+  --accent: #86c29c;
+  --accent-dim: #253329;
+
+  --grade-prime: #5cb886;
+  --grade-good: #93b865;
+  --grade-marginal: #dcaa48;
+  --grade-poor: #df8f55;
+  --grade-unsafe: #e06d55;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-rgb: 0, 0, 0;
+
+  --on-accent: #14201a;
+  --overlay-bg: rgba(30, 34, 28, 0.94);
+  --banner-bg: #3a2420;
+  --banner-border: #5a332c;
+
+  /*
+   * The basemap tiles are drawn light and there is no keyless dark style, so
+   * the canvas is inverted and hue-rotated back. Pins are DOM elements, not
+   * canvas pixels, so they keep their true grade colours.
+   */
+  --map-filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75);
+
+  color-scheme: dark;
+  }
 }
 
 * {
@@ -297,7 +393,7 @@ button {
 .ask button {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: var(--radius);
   padding: 0 16px;
   font-size: 13px;
@@ -378,7 +474,7 @@ button {
 
 .card:hover {
   border-color: var(--border-strong);
-  box-shadow: 0 1px 3px rgba(42, 51, 44, 0.07);
+  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.07);
 }
 
 .card[aria-selected="true"] {
@@ -661,8 +757,8 @@ button {
 
 .banner {
   padding: 9px 20px;
-  background: #fbeae6;
-  border-bottom: 1px solid #f0cfc7;
+  background: var(--banner-bg);
+  border-bottom: 1px solid var(--banner-border);
   color: var(--grade-unsafe);
   font-size: 12px;
 }
@@ -707,13 +803,13 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255, 253, 248, 0.95);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 7px 14px;
   font-size: 11.5px;
   color: var(--text-muted);
-  box-shadow: 0 1px 6px rgba(42, 51, 44, 0.14);
+  box-shadow: 0 1px 6px rgba(var(--shadow-rgb), 0.14);
   max-width: calc(100% - 24px);
 }
 
@@ -763,7 +859,7 @@ button {
   margin-top: 6px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: var(--radius);
   padding: 7px 14px;
   font-size: 12.5px;
@@ -782,7 +878,7 @@ button {
   font-weight: 700;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(42, 51, 44, 0.35);
+  box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.35);
   font-variant-numeric: tabular-nums;
   transition: transform 0.12s ease;
 }
@@ -802,7 +898,7 @@ button {
   left: 12px;
   bottom: 12px;
   z-index: 4;
-  background: rgba(255, 253, 248, 0.94);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 9px 11px;
@@ -812,7 +908,7 @@ button {
   color: var(--text-muted);
   backdrop-filter: blur(6px);
   flex-wrap: wrap;
-  box-shadow: 0 1px 4px rgba(42, 51, 44, 0.12);
+  box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.12);
 }
 
 .legend span {
@@ -823,6 +919,31 @@ button {
 
 .maplibregl-ctrl-attrib {
   font-size: 10px;
+}
+
+.maplibregl-canvas {
+  filter: var(--map-filter);
+}
+
+.theme-toggle {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- mobile --
@@ -936,7 +1057,7 @@ button {
     border-left: none;
     border-top: 1px solid var(--border-strong);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -8px 32px rgba(42, 51, 44, 0.22);
+    box-shadow: 0 -8px 32px rgba(var(--shadow-rgb), 0.22);
     z-index: 40;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: sheet-up 0.22s ease-out;
