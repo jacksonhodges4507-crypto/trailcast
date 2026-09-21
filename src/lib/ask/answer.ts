@@ -165,8 +165,16 @@ export function templateNarrative(
      * its favour. This is the comparison drive time exists to make possible.
      */
     if (extraMinutes >= 20 && margin > 0) {
+      // Scale the caveat to the cost. Twenty minutes for a noticeably better
+      // day is an easy call and should read like one; two hours is a real
+      // trade-off and should be named as one.
+      const pointsPerHour = margin / (extraMinutes / 60);
       sentences.push(
-        `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way — worth it if the day is the point, not if you are short on time.`,
+        extraMinutes < 45
+          ? `It is ${margin} points better than ${runnerUp.trail.name} for ${formatDrive(extraMinutes)} more each way, which is an easy trade.`
+          : pointsPerHour >= 8
+            ? `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way \u2014 a real trade-off, though the conditions gap justifies it.`
+            : `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way \u2014 worth it if the day is the point, not if you are short on time.`,
       );
     } else if (extraMinutes <= -20) {
       sentences.push(

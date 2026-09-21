@@ -155,3 +155,30 @@ describe("trade-off narrative", () => {
     expect(narrative).toContain("on the drive");
   });
 });
+
+describe("trade-off wording scales with the cost", () => {
+  const query: AskQuery = {
+    ...parseQuery("where should I climb saturday", TODAY),
+    origin: { ...PROVO, label: "your location" },
+    originSource: "device",
+  };
+
+  it("treats a short extra drive as an easy call", () => {
+    const narrative = templateNarrative(
+      query,
+      [located("a", "Close Pick", 90, 31), located("b", "Closer Still", 84, 11)],
+      TODAY,
+    );
+    expect(narrative).toContain("easy trade");
+    expect(narrative).not.toContain("short on time");
+  });
+
+  it("names a long extra drive as a genuine trade-off", () => {
+    const narrative = templateNarrative(
+      query,
+      [located("a", "Far Pick", 94, 160), located("b", "Near One", 90, 20)],
+      TODAY,
+    );
+    expect(narrative).toContain("short on time");
+  });
+});

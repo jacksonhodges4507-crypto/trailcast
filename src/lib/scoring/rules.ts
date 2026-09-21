@@ -102,12 +102,25 @@ export const temperatureRule: Rule = ({ trail, conditions, activity }) => {
   const range =
     low !== undefined ? `${round(low)}–${round(high)} °F` : `${round(high)} °F`;
 
+  /*
+   * The wording follows the same band as the score. It used to use fixed
+   * thresholds, so a 69 F climbing day was rated fair -- friction suffers --
+   * while the sentence underneath called it "comfortable". A rating and its
+   * explanation that disagree are worse than either alone.
+   */
   let reason: string;
-  if (felt > 92) reason = `Dangerous heat at ${range}${trail.exposed ? " with no shade" : ""}`;
-  else if (felt > 80) reason = `Hot at ${range}${trail.exposed ? " on an exposed route" : ""} — start early`;
-  else if (felt < 20) reason = `Bitter at ${range}; full winter kit`;
-  else if (felt < 40) reason = `Cold at ${range}; layers needed`;
-  else reason = `Comfortable at ${range}`;
+  if (felt > hi + 24) reason = `Dangerous heat at ${range}${trail.exposed ? " with no shade" : ""}`;
+  else if (felt > hi + 12) reason = `Hot at ${range}${trail.exposed ? " on an exposed route" : ""} \u2014 start early`;
+  else if (felt > hi) {
+    reason =
+      activity === "climb"
+        ? `Warm for climbing at ${range} \u2014 friction will suffer, so aim for shade or the morning`
+        : activity === "trail_run"
+          ? `Warm for running at ${range}; carry more water than usual`
+          : `Warm at ${range}${trail.exposed ? " on an exposed route" : ""}`;
+  } else if (felt < lo - 20) reason = `Bitter at ${range}; full winter kit`;
+  else if (felt < lo) reason = `Cold at ${range}; layers needed`;
+  else reason = activity === "climb" ? `Good sending temperatures at ${range}` : `Comfortable at ${range}`;
 
   return {
     id: "temperature",

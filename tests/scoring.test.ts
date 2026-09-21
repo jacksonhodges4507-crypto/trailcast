@@ -646,3 +646,25 @@ describe("surface explanation", () => {
     expect(factor.reason).toMatch(/\. 1 stream crossing will be running high/);
   });
 });
+
+describe("temperature wording matches its rating", () => {
+  it("does not call a warm climbing day comfortable", () => {
+    const factor = temperatureRule({
+      trail: trail({ exposed: false }),
+      conditions: goodConditions({ tempMaxF: 69, tempMinF: 50 }),
+      activity: "climb",
+    });
+    expect(factor.score ?? 100).toBeLessThan(80);
+    expect(factor.reason.toLowerCase()).not.toContain("comfortable");
+    expect(factor.reason.toLowerCase()).toContain("friction");
+  });
+
+  it("still calls the same day comfortable for a hike", () => {
+    const factor = temperatureRule({
+      trail: trail({ exposed: false }),
+      conditions: goodConditions({ tempMaxF: 66, tempMinF: 50 }),
+      activity: "hike",
+    });
+    expect(factor.reason).toContain("Comfortable");
+  });
+});
