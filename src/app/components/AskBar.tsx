@@ -12,9 +12,11 @@ const SUGGESTIONS = [
 
 export interface AskBarProps {
   onAnswer: (answer: AskAnswer) => void;
+  /** The viewer's coarsened location, when they have chosen to share it. */
+  coords?: { lat: number; lon: number } | null;
 }
 
-export default function AskBar({ onAnswer }: AskBarProps) {
+export default function AskBar({ onAnswer, coords }: AskBarProps) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,7 +33,9 @@ export default function AskBar({ onAnswer }: AskBarProps) {
       const response = await fetch("/api/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify(
+          coords ? { question: trimmed, lat: coords.lat, lon: coords.lon } : { question: trimmed },
+        ),
       });
 
       if (!response.ok) {

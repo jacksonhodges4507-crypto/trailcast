@@ -2,6 +2,7 @@
 
 import type { TrailReport } from "@/lib/types";
 import { ACTIVITIES } from "@/lib/activities";
+import { formatDrive } from "@/lib/format";
 import {
   GRADE_CLASS,
   GRADE_COLOR,
@@ -25,7 +26,7 @@ export interface TrailDetailProps {
  * today, and how much it counts toward this activity's score.
  */
 export default function TrailDetail({ report, onClose }: TrailDetailProps) {
-  const { trail, verdict, conditions } = report;
+  const { trail, verdict, conditions, travel } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
 
   /*
@@ -61,6 +62,17 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
 
       <div className="detail-body">
         <p className="detail-blurb">{trail.blurb}</p>
+
+        {travel ? (
+          <div className="detail-drive">
+            <strong>{formatDrive(travel.minutes)}</strong> drive each way · {travel.miles} mi
+            <span>
+              {travel.source === "estimate"
+                ? "Estimated from straight-line distance — routing was unavailable."
+                : "Free-flow road time: no traffic, closures or chain controls."}
+            </span>
+          </div>
+        ) : null}
 
         <div
           className="card-headline"
@@ -170,6 +182,22 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
               {trail.rockTypeSource === "inferred"
                 ? " · * rock type inferred from the surrounding region, not verified"
                 : ""}
+            </div>
+          </div>
+        ) : null}
+
+        {travel ? (
+          <div className="sources">
+            <h3>Routing</h3>
+            <div className="source-item">
+              {travel.source === "osrm" ? (
+                <a href="https://project-osrm.org/" target="_blank" rel="noreferrer noopener">
+                  OSRM
+                </a>
+              ) : (
+                "Straight-line estimate"
+              )}
+              {" · from your location, rounded to ~1 km and not stored"}
             </div>
           </div>
         ) : null}

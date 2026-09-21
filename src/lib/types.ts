@@ -216,10 +216,21 @@ export interface Verdict {
   confidence: number;
 }
 
+/** Drive time from the user's location, when they have shared one. */
+export interface Travel {
+  /** One-way, free-flow: no traffic, closures or chain controls. */
+  minutes: number;
+  miles: number;
+  /** "osrm" for routed road time; "estimate" for the straight-line fallback. */
+  source: "osrm" | "estimate";
+}
+
 export interface TrailReport {
   trail: Trail;
   conditions: Conditions;
   verdict: Verdict;
+  /** Present only when the request carried an origin. */
+  travel?: Travel;
 }
 
 export interface ConditionsResponse {
@@ -241,8 +252,10 @@ export interface AskQuery {
   date: string;
   /** Free-text origin, when the user named one. */
   near?: string;
-  /** Resolved origin coordinates, when `near` matched a known place. */
+  /** Resolved origin coordinates, from a named place or the device. */
   origin?: { lat: number; lon: number; label: string };
+  /** Where the origin came from, so the narrative can phrase it correctly. */
+  originSource?: "place" | "device";
   /** Max drive radius in miles, when the user gave one. */
   withinMi?: number;
   maxDistanceMi?: number;

@@ -4,6 +4,7 @@ import { assembleConditions } from "./conditions";
 import { scoreTrail, compareVerdicts } from "./scoring";
 import { gridCentre, gridKey } from "./geo";
 import { haversineMi } from "./geo";
+import { travelTimes } from "./travel";
 import type { ActivityId, SourceStatus, Trail, TrailReport } from "./types";
 
 /**
@@ -128,6 +129,16 @@ export async function buildReports(options: BuildOptions): Promise<BuildResult> 
 
   const reports = results.flatMap((r) => r.reports);
   reports.sort((a, b) => compareVerdicts(a.verdict, b.verdict));
+
+  // Drive times are a property of the viewer, not the place, so they are
+  // attached alongside the verdict rather than folded into it.
+  if (options.origin) {
+    const times = await travelTimes(options.origin, trails, options.signal);
+    for (const report of reports) {
+      const travel = times.get(report.trail.id);
+      if (travel) report.travel = travel;
+    }
+  }
 
   const sourceStatus = mergeStatus(results.map((r) => r.status));
 

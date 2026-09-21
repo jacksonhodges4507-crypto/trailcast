@@ -1,6 +1,10 @@
 import { TRAILS } from "../trails";
 import { buildReports } from "../report";
-import { haversineMi } from "../geo";
+import { haversineMi, type LatLon } from "../geo";
+import { drivePenalty } from "../travel";
+import { formatDrive } from "../format";
+
+export { formatDrive };
 import { gradeLabel, lowerFirst } from "../scoring";
 import { relativeLabel, todayIso } from "../dates";
 import { parseQuery } from "./parse";
@@ -19,7 +23,11 @@ export const TIE_POINTS = 3;
 
 export function radiusFor(query: AskQuery): number | undefined {
   if (query.withinMi !== undefined) return query.withinMi;
-  return query.origin ? DEFAULT_NEARBY_RADIUS_MI : undefined;
+  // "Near Park City" implies a radius. Sharing your location does not: it
+  // means "account for the drive", not "only show me what is close", so a
+  // superb day two hours away stays in contention and the trade-off is
+  // weighed rather than filtered out.
+  return query.origin && query.originSource !== "device" ? DEFAULT_NEARBY_RADIUS_MI : undefined;
 }
 
 function applyFilters(query: AskQuery): Trail[] {
@@ -39,9 +47,14 @@ function applyFilters(query: AskQuery): Trail[] {
 }
 
 /**
- * When the user named an origin, break near-ties on conditions by distance.
- * A trail eight miles away and one point worse is the better answer to
- * "where should I ride near Park City" than one thirty miles away.
+ * Rank by whether a place is worth going to from here, not just by how good
+ * it is.
+ *
+ * With drive times available, each option's conditions score is discounted
+ * by the cost of getting there (see drivePenalty). Without them, a named
+ * origin still breaks near-ties by straight-line distance. Either way the
+ * conditions score shown on the card is untouched: how good a crag is today
+ * is a fact about the crag; whether it is worth the drive is a fact about you.
  */
 export function rankByProximity(
   reports: TrailReport[],
@@ -49,15 +62,20 @@ export function rankByProximity(
 ): TrailReport[] {
   if (!origin) return reports;
 
+  const worth = (r: TrailReport) =>
+    (r.verdict.score ?? -1) - (r.travel ? drivePenalty(r.travel.minutes) : 0);
+  const cost = (r: TrailReport) =>
+    r.travel ? r.travel.minutes : haversineMi(origin, r.trail);
+
   return reports.slice().sort((a, b) => {
-    // A no-go stays last regardless of how close it is.
+    // A no-go stays last however close it is.
     if (a.verdict.grade === "unsafe" && b.verdict.grade !== "unsafe") return 1;
     if (b.verdict.grade === "unsafe" && a.verdict.grade !== "unsafe") return -1;
 
-    const scoreDelta = (b.verdict.score ?? -1) - (a.verdict.score ?? -1);
-    if (Math.abs(scoreDelta) > TIE_POINTS) return scoreDelta;
+    const delta = worth(b) - worth(a);
+    if (Math.abs(delta) > TIE_POINTS) return delta;
 
-    return haversineMi(origin, a.trail) - haversineMi(origin, b.trail);
+    return cost(a) - cost(b);
   });
 }
 
@@ -98,9 +116,11 @@ export function templateNarrative(
 
   const sentences: string[] = [];
 
-  const near = query.origin
-    ? ` (${Math.round(haversineMi(query.origin, top.trail))} mi from ${query.origin.label})`
-    : "";
+  const near = top.travel
+    ? ` (${formatDrive(top.travel.minutes)} drive${top.travel.source === "estimate" ? ", estimated" : ""})`
+    : query.origin
+      ? ` (${Math.round(haversineMi(query.origin, top.trail))} mi from ${query.origin.label})`
+      : "";
 
   sentences.push(
     `${top.trail.name} in ${top.trail.region}${near} is the pick ${when} — ${gradeLabel(top.verdict.grade).toLowerCase()} at ${top.verdict.score ?? "?"}, ${top.trail.distanceMi} mi and ${top.trail.gainFt.toLocaleString()} ft of gain.`,
@@ -135,8 +155,24 @@ export function templateNarrative(
     }
 
     const margin = (top.verdict.score ?? 0) - (runnerUp.verdict.score ?? 0);
+    const extraMinutes =
+      top.travel && runnerUp.travel ? top.travel.minutes - runnerUp.travel.minutes : 0;
 
-    if (widest && widest.gap > 2 && widest.better && widest.worse) {
+    /*
+     * The trade-off sentence. When the pick is further than the runner-up,
+     * the honest recommendation says what the extra drive buys -- and when
+     * the pick is the closer one, the drive is worth mentioning as a point in
+     * its favour. This is the comparison drive time exists to make possible.
+     */
+    if (extraMinutes >= 20 && margin > 0) {
+      sentences.push(
+        `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way — worth it if the day is the point, not if you are short on time.`,
+      );
+    } else if (extraMinutes <= -20) {
+      sentences.push(
+        `It also beats ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on the drive, by ${formatDrive(-extraMinutes)} each way.`,
+      );
+    } else if (widest && widest.gap > 2 && widest.better && widest.worse) {
       sentences.push(
         `It edges out ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on ${widest.label} — ${widest.better} against ${widest.worse}.`,
       );
@@ -168,6 +204,8 @@ export function templateNarrative(
 
 export interface AskOptions {
   question: string;
+  /** The viewer's own location, already coarsened. Never stored. */
+  deviceOrigin?: LatLon;
   today?: string;
   /** Set false to force the deterministic path, used by tests. */
   allowLlm?: boolean;
@@ -179,7 +217,19 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
   const useLlm = (options.allowLlm ?? true) && isLlmEnabled();
 
   const baseQuery = parseQuery(options.question, today);
-  const query = useLlm ? await refineQuery(options.question, today, baseQuery) : baseQuery;
+  const refined = useLlm ? await refineQuery(options.question, today, baseQuery) : baseQuery;
+
+  // A place named in the question wins over the device: "near Moab" asked
+  // from Provo means Moab.
+  const query: AskQuery =
+    refined.origin || !options.deviceOrigin
+      ? { ...refined, originSource: refined.origin ? "place" : refined.originSource }
+      : {
+          ...refined,
+          origin: { ...options.deviceOrigin, label: "your location" },
+          originSource: "device",
+          interpretation: `${refined.interpretation}, from your location`,
+        };
 
   const candidates = applyFilters(query);
 

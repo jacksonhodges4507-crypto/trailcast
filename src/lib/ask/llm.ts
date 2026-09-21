@@ -150,6 +150,8 @@ export async function narrate(
     gainFt: report.trail.gainFt,
     grade: report.verdict.grade,
     score: report.verdict.score,
+    driveMinutesOneWay: report.travel?.minutes ?? null,
+    driveIsEstimate: report.travel ? report.travel.source === "estimate" : null,
     blurb: report.trail.blurb,
     vetoes: report.verdict.factors
       .filter((f) => f.veto)
@@ -186,6 +188,10 @@ export async function narrate(
     "- If a factor is listed in missingInputs, do not claim anything about it.",
     "- Say the caveat even when the answer is good. A confident recommendation",
     "  with no downside named is the least useful kind.",
+    "- If driveMinutesOneWay is present, weigh it. Say whether the top option's",
+    "  better conditions justify any extra drive over the runner-up, in minutes.",
+    "  A few points is rarely worth an extra hour each way; a veto elsewhere",
+    "  always is. Drive times are free-flow estimates: never promise them.",
   ].join("\n");
 
   const user = JSON.stringify(
@@ -194,6 +200,7 @@ export async function narrate(
       date: query.date,
       activity: query.activity,
       origin: query.origin?.label ?? null,
+      originIsDevice: query.originSource === "device",
       options,
     },
     null,

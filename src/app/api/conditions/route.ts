@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { buildReports } from "@/lib/report";
 import { parseActivity } from "@/lib/activities";
 import { forecastWindow, isWithinForecastWindow, todayIso } from "@/lib/dates";
+import { parseOrigin } from "@/lib/origin";
 import type { ConditionsResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     requestedDate && isWithinForecastWindow(requestedDate, today) ? requestedDate : today;
 
   const activity = parseActivity(url.searchParams.get("activity"));
+  const origin = parseOrigin(url.searchParams.get("lat"), url.searchParams.get("lon"));
 
   try {
     const built = await buildReports({
@@ -29,6 +31,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       // Warm the whole forecast window in the same upstream call so that
       // switching days in the UI is served from cache.
       alsoFetch: forecastWindow(today),
+      origin,
       signal: request.signal,
     });
 
@@ -47,7 +50,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       headers: {
         // Cache at the edge briefly, and keep serving the old copy while a
         // new one is built. Conditions data does not need to be to-the-second.
-        "cache-control": "public, s-maxage=300, stale-while-revalidate=1800",
+        "cache-control": origin
+          ? "private, no-store"
+          : "public, s-maxage=300, stale-while-revalidate=1800",
       },
     });
   } catch (error) {

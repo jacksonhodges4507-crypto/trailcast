@@ -5,6 +5,7 @@ import MapView from "./MapView";
 import TrailDetail from "./TrailDetail";
 import AskBar from "./AskBar";
 import ThemeToggle from "./ThemeToggle";
+import { formatDrive } from "@/lib/format";
 import { GRADE_CLASS, GRADE_TEXT } from "./grade";
 import { ACTIVITIES, ACTIVITY_IDS } from "@/lib/activities";
 import { forecastWindow, relativeLabel, weekdayName } from "@/lib/dates";
@@ -49,12 +50,52 @@ export default function Dashboard({ initial, today }: DashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  /*
+   * The viewer's location, held in memory only.
+   *
+   * Requested on an explicit click, never on page load; rounded to about a
+   * kilometre before it goes anywhere; and deliberately not written to
+   * storage, so closing the tab forgets it. Asking again next visit costs one
+   * click, which is the right price for not keeping someone's whereabouts.
+   */
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+
+  const requestLocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocError("This browser cannot share a location.");
+      return;
+    }
+    setLocating(true);
+    setLocError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({
+          lat: Math.round(position.coords.latitude * 100) / 100,
+          lon: Math.round(position.coords.longitude * 100) / 100,
+        });
+        setLocating(false);
+      },
+      (error) => {
+        setLocating(false);
+        setLocError(
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was declined. Everything else still works."
+            : "Could not get a location just now.",
+        );
+      },
+      // Coarse is plenty for drive times, and faster and cheaper on battery.
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 },
+    );
+  }, []);
+
   const days = useMemo(() => forecastWindow(today), [today]);
 
   // Refetch whenever the view changes, skipping the initial server-rendered
   // combination, which we already have.
   useEffect(() => {
-    if (activity === initial.activity && date === initial.date && data === initial) {
+    if (activity === initial.activity && date === initial.date && data === initial && !coords) {
       return;
     }
 
@@ -62,7 +103,8 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/conditions?date=${date}&activity=${activity}`, {
+    const origin = coords ? `&lat=${coords.lat}&lon=${coords.lon}` : "";
+    fetch(`/api/conditions?date=${date}&activity=${activity}${origin}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -85,7 +127,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     // `data`/`initial` are intentionally excluded: this effect reacts to the
     // user's chosen view, not to the payload it produces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity, date]);
+  }, [activity, date, coords]);
 
   const handleAnswer = useCallback((answer: AskAnswer) => {
     setActivity(answer.query.activity);
@@ -149,7 +191,26 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             </div>
           </div>
 
-          <AskBar onAnswer={handleAnswer} />
+          <div className="locate">
+            {coords ? (
+              <>
+                <span>
+                  <span aria-hidden>📍</span> Drive times from your location
+                </span>
+                <button type="button" onClick={() => setCoords(null)}>
+                  Clear
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={requestLocation} disabled={locating}>
+                <span aria-hidden>📍</span>{" "}
+                {locating ? "Locating\u2026" : "Use my location for drive times"}
+              </button>
+            )}
+            {locError ? <span className="locate-error">{locError}</span> : null}
+          </div>
+
+          <AskBar onAnswer={handleAnswer} coords={coords} />
 
           {loading ? (
             <div className="loading">Scoring {ACTIVITIES[activity].label.toLowerCase()} conditions…</div>
@@ -191,6 +252,12 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                   <div className="card-headline">{report.verdict.headline}</div>
 
                   <div className="card-stats">
+                    {report.travel ? (
+                      <span className="drive" title={report.travel.source === "estimate" ? "Estimated from straight-line distance" : "Free-flow drive time, no traffic"}>
+                        <span aria-hidden>🚗</span> {formatDrive(report.travel.minutes)}
+                        {report.travel.source === "estimate" ? "*" : ""}
+                      </span>
+                    ) : null}
                     <span>{report.trail.distanceMi} mi</span>
                     <span>{report.trail.gainFt.toLocaleString()} ft</span>
                     {/*

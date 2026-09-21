@@ -158,6 +158,39 @@ works today" are different claims.
 
 ---
 
+## Drive time, and what it does to the answer
+
+"Best conditions" and "best choice" stop being the same thing once a
+three-hour drive is involved. With a location shared, the ask layer ranks by
+whether a place is worth going to from where you are, and says so:
+
+> *Maple Canyon is the pick Saturday (2 h 25 m drive) — prime at 97. It is 9
+> points better than Rock Canyon but 2 h 10 m further each way — worth it if
+> the day is the point, not if you are short on time.*
+
+Drive time never touches the conditions score. How good a crag is today is a
+fact about the crag; whether it is worth the drive is a fact about you. The
+card shows the same score to everyone, and the *ranking* applies a modest
+cost: the first half hour is free, then six points per hour each way.
+
+Routing uses OSRM's table service, which returns times to all forty
+destinations in one request rather than forty. Times are free-flow — no
+traffic, closures or chain controls — and are labelled that way. If routing
+is unavailable, a straight-line estimate is used and marked as one.
+
+### Location handling
+
+- **Opt-in only.** Requested on an explicit click, never on page load.
+- **Coarsened to ~1 km** in the browser before it is sent anywhere, and again
+  on the server, which treats it as untrusted input and rejects anything
+  malformed or out of range before it can reach a third party.
+- **Never stored.** Held in memory for the session; not written to browser
+  storage, not logged, not cached at the edge. Closing the tab forgets it.
+- **Disclosed.** The panel says drive times come from OSRM, which does receive
+  the coarsened origin in order to route from it.
+
+---
+
 ## The climbing case
 
 The clearest example of why per-trail attributes beat a forecast.
@@ -216,6 +249,7 @@ cells at a time, and returns `scored` and `available` so the UI can say
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | US AQI, PM2.5 (daytime peak) | no |
 | [NIFC WFIGS](https://data-nifc.opendata.arcgis.com/) | active wildfire perimeters within 100 mi | no |
 | [USGS Water Data](https://waterdata.usgs.gov/) | streamflow and water temperature at the nearest gauge | no |
+| [OSRM](https://project-osrm.org/) | drive times from the viewer's location (opt-in) | no |
 | [OpenFreeMap](https://openfreemap.org/) | basemap tiles | no |
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
 | [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported, not live) | no |
