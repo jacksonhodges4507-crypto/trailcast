@@ -1,15 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Big_Shoulders_Display, Instrument_Sans, JetBrains_Mono } from "next/font/google";
+import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 /*
  * The brand's three voices: Big Shoulders Display for headlines, Instrument
  * Sans for everything read, JetBrains Mono for the numbers (64°F · 8 mph).
- * next/font self-hosts them at build time, so no request goes to Google at
- * runtime and there is no layout shift while they load.
+ * next/font self-hosts the body and number fonts at build time. The headline
+ * face is linked from Google Fonts instead: it is published as "Big
+ * Shoulders" now, and the next/font catalogue this build pins does not list
+ * it under either name.
  */
-const display = Big_Shoulders_Display({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-display" });
 const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-mono" });
 
@@ -41,9 +42,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // The bootstrap script may set data-theme before React hydrates, so the
     // server and client markup legitimately differ on this one attribute.
-    <html lang="en" suppressHydrationWarning className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@700;800&display=swap"
+        />
       </head>
       <body>{children}</body>
     </html>

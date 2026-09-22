@@ -61,7 +61,7 @@
 
   --font-sans-stack: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono-stack: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-display-stack: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  --font-display-stack: "Big Shoulders", "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
 }
 
 /*
