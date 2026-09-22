@@ -14,16 +14,25 @@ import type { StoredReport } from "./kinds";
  * command and needs no client library.
  */
 
+/**
+ * Two kinds of entry share this store. A condition report describes today
+ * and is worthless next week; a review describes the place itself and should
+ * outlive the season, so each namespace keeps its own depth and expiry.
+ */
+export type Namespace = "reports" | "reviews";
+
+const LIMITS: Record<Namespace, { keep: number; retainSeconds: number }> = {
+  reports: { keep: 200, retainSeconds: 7 * 24 * 3600 },
+  reviews: { keep: 500, retainSeconds: 400 * 24 * 3600 },
+};
+
 export interface ReportStore {
   kind: "redis" | "memory";
-  append(trailId: string, report: StoredReport): Promise<void>;
-  list(trailId: string): Promise<StoredReport[]>;
+  append(trailId: string, report: StoredReport, ns?: Namespace): Promise<void>;
+  list(trailId: string, ns?: Namespace): Promise<StoredReport[]>;
   /** Increment a counter that expires; returns the new count. */
   hit(key: string, windowSeconds: number): Promise<number>;
 }
-
-const KEEP = 200;
-const RETAIN_SECONDS = 7 * 24 * 3600;
 
 function parseReport(raw: unknown): StoredReport | null {
   if (typeof raw !== "string") return null;
@@ -63,16 +72,17 @@ function redisStore(url: string, token: string): ReportStore {
 
   return {
     kind: "redis",
-    async append(trailId, report) {
-      const key = `reports:${trailId}`;
+    async append(trailId, report, ns = "reports") {
+      const key = `${ns}:${trailId}`;
+      const { keep, retainSeconds } = LIMITS[ns];
       await pipeline([
         ["LPUSH", key, JSON.stringify(report)],
-        ["LTRIM", key, 0, KEEP - 1],
-        ["EXPIRE", key, RETAIN_SECONDS],
+        ["LTRIM", key, 0, keep - 1],
+        ["EXPIRE", key, retainSeconds],
       ]);
     },
-    async list(trailId) {
-      const [result] = await pipeline([["LRANGE", `reports:${trailId}`, 0, KEEP - 1]]);
+    async list(trailId, ns = "reports") {
+      const [result] = await pipeline([["LRANGE", `${ns}:${trailId}`, 0, LIMITS[ns].keep - 1]]);
       return Array.isArray(result)
         ? result.map(parseReport).filter((r): r is StoredReport => r !== null)
         : [];
@@ -93,13 +103,14 @@ function memoryStore(): ReportStore {
 
   return {
     kind: "memory",
-    async append(trailId, report) {
-      const list = lists.get(trailId) ?? [];
+    async append(trailId, report, ns = "reports") {
+      const key = `${ns}:${trailId}`;
+      const list = lists.get(key) ?? [];
       list.unshift(report);
-      lists.set(trailId, list.slice(0, KEEP));
+      lists.set(key, list.slice(0, LIMITS[ns].keep));
     },
-    async list(trailId) {
-      return [...(lists.get(trailId) ?? [])];
+    async list(trailId, ns = "reports") {
+      return [...(lists.get(`${ns}:${trailId}`) ?? [])];
     },
     async hit(key, windowSeconds) {
       const now = Date.now();

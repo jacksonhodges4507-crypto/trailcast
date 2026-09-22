@@ -95,3 +95,39 @@ export function gridCentre(key: string): LatLon {
   const [latStr, lonStr] = key.split(",");
   return { lat: Number(latStr), lon: Number(lonStr) };
 }
+
+/** How far a pin may be moved onto its drawn line, in miles. */
+export const SNAP_LIMIT_MI = 0.7;
+
+/**
+ * Put the pin on the line.
+ *
+ * A trailhead coordinate and an OpenStreetMap way are two different people's
+ * idea of where a trail is: ours is the parking lot, theirs is the first
+ * mapped metre of path. A reader sees the gap between them as the map being
+ * wrong, so where a place has a drawn line the pin moves to the point on
+ * that line nearest the trailhead.
+ *
+ * The move is capped. Past SNAP_LIMIT_MI the line is not a near-miss, it is
+ * the wrong feature, and dragging the pin onto it would turn a visible gap
+ * into an invisible error.
+ */
+export function snapToLines(
+  point: LatLon,
+  lines: [number, number][][],
+): [number, number] {
+  let best: [number, number] | null = null;
+  let bestMi = SNAP_LIMIT_MI;
+
+  for (const line of lines) {
+    for (const [lon, lat] of line) {
+      const miles = haversineMi(point, { lat, lon });
+      if (miles < bestMi) {
+        bestMi = miles;
+        best = [lon, lat];
+      }
+    }
+  }
+
+  return best ?? [point.lon, point.lat];
+}

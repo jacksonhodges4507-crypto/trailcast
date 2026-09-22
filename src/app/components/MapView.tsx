@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActivityId, TrailReport } from "@/lib/types";
 import { GRADE_COLOR } from "./grade";
+import { snapToLines } from "@/lib/geo";
 
 /*
  * Trail and wall overlays only draw once you are looking at somewhere in
@@ -460,6 +461,17 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
       const id = report.trail.id;
       const color = cssColor(GRADE_COLOR[report.verdict.grade]);
       const selected = id === selectedId;
+
+      /*
+       * Once a place's line has arrived, sit its pin on it. Our coordinate is
+       * the trailhead and OSM's is the first mapped metre of path, and the
+       * gap between the two read as the map being broken.
+       */
+      const drawn = overlays.lines[id];
+      const pin = markersRef.current.get(id);
+      if (pin && drawn && drawn.length > 0) {
+        pin.marker.setLngLat(snapToLines(report.trail, drawn));
+      }
 
       if (activity === "climb") {
         for (const [lon, lat, name, count] of overlays.walls[id] ?? []) {

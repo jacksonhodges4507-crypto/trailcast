@@ -6,6 +6,7 @@ import { formatDrive, quickStats, routeFigures } from "@/lib/format";
 import { Hero } from "./Brand";
 import FishGuide from "./FishGuide";
 import UserReports from "./UserReports";
+import Reviews from "./Reviews";
 import Directions from "./Directions";
 import ClimbRoutes from "./ClimbRoutes";
 import TrailLook from "./TrailLook";
@@ -285,6 +286,12 @@ export default function TrailDetail({
             {trail.waterCrossings > 0 ? ` · crossings=${trail.waterCrossings}` : ""}
           </div>
         </div>
+
+        <Reviews
+          trailId={trail.id}
+          trailName={trail.name}
+          activityLabel={activityLabel}
+        />
 
         <div style={{ marginTop: 14 }}>
           <span className={`score-grade ${GRADE_CLASS[verdict.grade]}`}>

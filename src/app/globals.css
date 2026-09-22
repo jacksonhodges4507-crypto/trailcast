@@ -3096,3 +3096,191 @@ a.climb-name:hover {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* ---- Was it worth it: reviews of the place, not today ---- */
+
+.reviews {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.reviews-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.reviews-head h3 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.reviews-headline {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.reviews-empty {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.reviews-bars {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.reviews-bar {
+  display: grid;
+  grid-template-columns: 116px 1fr 24px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.reviews-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.reviews-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--text-faint);
+}
+
+.reviews-bar.tone-worth-it .reviews-fill {
+  background: var(--grade-good);
+}
+
+.reviews-bar.tone-mixed .reviews-fill {
+  background: var(--grade-marginal);
+}
+
+.reviews-bar.tone-skip .reviews-fill {
+  background: var(--ember);
+}
+
+.reviews-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.reviews-ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reviews-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reviews-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.reviews-btn.chosen {
+  background: var(--accent);
+  color: var(--bone);
+  border-color: var(--accent);
+}
+
+.reviews-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.reviews-note {
+  display: block;
+  margin-top: 10px;
+}
+
+.reviews-note span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.reviews-note input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.reviews-message {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.reviews-notes {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.reviews-notes li {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border-left: 3px solid var(--text-faint);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.reviews-notes li.tone-worth-it {
+  border-left-color: var(--grade-good);
+}
+
+.reviews-notes li.tone-mixed {
+  border-left-color: var(--grade-marginal);
+}
+
+.reviews-notes li.tone-skip {
+  border-left-color: var(--ember);
+}
+
+.reviews-foot {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
