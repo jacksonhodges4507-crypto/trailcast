@@ -21,7 +21,18 @@ export interface DashboardProps {
 function SourceChips({ status, degraded }: { status: SourceStatus[]; degraded: boolean }) {
   if (status.length === 0) return null;
 
+  const up = status.filter((s) => s.ok).length;
   return (
+    <>
+    <span
+      className={`chip status-compact`}
+      title={status.map((s) => `${s.sourceName}: ${s.ok ? "ok" : s.error ?? "down"}`).join("\n")}
+    >
+      <span className={`dot ${up === status.length ? "dot-ok" : "dot-down"}`} />
+      <em style={{ fontStyle: "normal" }}>
+        {up}/{status.length} sources live
+      </em>
+    </span>
     <div className="statusbar">
       {status.map((source) => {
         const tone = !source.ok ? "dot-down" : source.cached ? "dot-cached" : "dot-ok";
@@ -41,6 +52,7 @@ function SourceChips({ status, degraded }: { status: SourceStatus[]; degraded: b
       })}
       {degraded ? <span style={{ color: "var(--grade-poor)" }}>partial data</span> : null}
     </div>
+    </>
   );
 }
 

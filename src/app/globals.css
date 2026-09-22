@@ -471,7 +471,7 @@ button {
   color: var(--text-faint);
 }
 
-.ask button {
+.ask-row button {
   border: 1px solid var(--accent);
   background: var(--accent);
   color: var(--on-accent);
@@ -482,7 +482,7 @@ button {
   white-space: nowrap;
 }
 
-.ask button:disabled {
+.ask-row button:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -1423,7 +1423,7 @@ button {
     padding: 11px 12px;
   }
 
-  .ask button {
+  .ask-row button {
     min-height: 44px;
   }
 
@@ -2003,4 +2003,28 @@ button {
   .legend {
     bottom: 10px;
   }
+}
+
+/* Phones: a one-line header, so the content starts near the top. */
+@media (max-width: 900px) {
+  .masthead {
+    flex-wrap: nowrap;
+  }
+
+  .masthead-right {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .masthead .statusbar {
+    display: none;
+  }
+
+  .masthead .status-compact {
+    display: inline-flex;
+  }
+}
+
+.status-compact {
+  display: none;
 }
