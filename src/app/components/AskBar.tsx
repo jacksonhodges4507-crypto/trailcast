@@ -261,7 +261,7 @@ export default function AskBar({ onAnswer, coords, onShowMap, onPick, prefill }:
             }
           }}
           rows={2}
-          placeholder="Ask Scout anything — e.g. somewhere shady and easy to hike Saturday near Provo"
+          placeholder="Ask Scout anything…"
           aria-label="Ask Scout"
           maxLength={400}
         />

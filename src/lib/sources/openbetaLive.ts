@@ -16,11 +16,13 @@ import { haversineMi } from "../geo";
 const ENDPOINT = "https://api.openbeta.io/";
 const DAY = 86_400;
 
-/** One route: [name, grade, type code, length in metres (0 = unknown), wall index]. */
-export type RouteRow = [string, string, string, number, number];
+/** One route: [name, grade, type code, length in metres (0 = unknown), wall index, OpenBeta id]. */
+export type RouteRow = [string, string, string, number, number, string];
 
 export interface Wall {
   n: string;
+  /** OpenBeta area id, for linking to its page. */
+  u?: string;
   lat: number;
   lng: number;
   /** Routes recorded on this wall. */
@@ -38,6 +40,7 @@ export interface ClimbData {
 export const ROUTE_CAP = 600;
 
 interface RawClimb {
+  uuid?: string;
   name?: string;
   grades?: { yds?: string | null; vscale?: string | null } | null;
   type?: Record<string, boolean | null> | null;
@@ -45,6 +48,7 @@ interface RawClimb {
 }
 
 interface RawArea {
+  uuid?: string;
   areaName?: string;
   totalClimbs?: number;
   metadata?: { lat?: number | null; lng?: number | null; leaf?: boolean | null } | null;
@@ -57,18 +61,18 @@ function nested(fields: string, depth: number): string {
   return depth === 0 ? fields : `${fields} children { ${nested(fields, depth - 1)} }`;
 }
 
-const WALL_FIELDS = "areaName totalClimbs metadata { lat lng leaf }";
-const CLIMB_FIELDS = `${WALL_FIELDS} climbs { name grades { yds vscale } type { sport trad bouldering tr aid ice mixed alpine } length }`;
+const WALL_FIELDS = "uuid areaName totalClimbs metadata { lat lng leaf }";
+const CLIMB_FIELDS = `${WALL_FIELDS} climbs { uuid name grades { yds vscale } type { sport trad bouldering tr aid ice mixed alpine } length }`;
 
-async function query(fields: string, uuid: string, signal?: AbortSignal): Promise<RawArea> {
+async function query(fields: string, uuid: string, depth = 4, timeoutMs = 15_000): Promise<RawArea> {
   const response = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", "user-agent": "TrailCast (portfolio project)" },
     body: JSON.stringify({
-      query: `query($u: ID) { area(uuid: $u) { ${nested(fields, 4)} } }`,
+      query: `query($u: ID) { area(uuid: $u) { ${nested(fields, depth)} } }`,
       variables: { u: uuid },
     }),
-    signal: signal ?? AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error(`OpenBeta answered ${response.status}`);
   const body = (await response.json()) as { data?: { area?: RawArea | null }; errors?: unknown };
@@ -100,7 +104,7 @@ export function collectWalls(root: RawArea): { wall: Wall; climbs: RawClimb[] }[
     const count = climbs.length > 0 ? climbs.length : isLeaf ? area.totalClimbs ?? 0 : 0;
     if (count > 0 && typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0)) {
       out.push({
-        wall: { n: (area.areaName ?? "").trim(), lat: round(lat), lng: round(lng), c: count },
+        wall: { n: (area.areaName ?? "").trim(), u: area.uuid, lat: round(lat), lng: round(lng), c: count },
         climbs,
       });
     }
@@ -142,24 +146,61 @@ export async function wallsFor(trailId: string): Promise<Wall[]> {
 }
 
 /** Walls and their routes, for the area someone has opened. */
+/*
+ * Big areas are fetched in pieces. Asking OpenBeta for Little Cottonwood
+ * Canyon's whole tree -- nearly two thousand routes -- in one query took
+ * longer than the timeout, so the route list came back "unavailable" for
+ * exactly the areas people most want it for. The top level is fetched
+ * first, then each sub-area separately and a few at a time; a sub-area that
+ * fails is skipped rather than failing the whole list.
+ */
+async function climbTree(uuid: string): Promise<{ root: RawArea; complete: boolean }> {
+  const root = await query(`${CLIMB_FIELDS} children { uuid totalClimbs }`, uuid, 0, 15_000);
+  const children = (root.children ?? [])
+    .filter((c): c is RawArea & { uuid: string } => typeof c.uuid === "string" && (c.totalClimbs ?? 0) > 0)
+    .sort((a, b) => (b.totalClimbs ?? 0) - (a.totalClimbs ?? 0));
+
+  const loaded: RawArea[] = [];
+  let complete = true;
+  const queue = [...children];
+  const worker = async () => {
+    for (let child = queue.shift(); child; child = queue.shift()) {
+      try {
+        loaded.push(await query(CLIMB_FIELDS, child.uuid, 3, 20_000));
+      } catch {
+        complete = false;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, children.length) }, worker));
+
+  // Keep the busiest sub-areas first, as OpenBeta ranks them.
+  const order = new Map(children.map((c, i) => [c.uuid, i]));
+  loaded.sort((a, b) => (order.get(a.uuid ?? "") ?? 0) - (order.get(b.uuid ?? "") ?? 0));
+  return { root: { ...root, children: loaded }, complete };
+}
+
+/** Walls and their routes, for the area someone has opened. */
 export async function climbsFor(trailId: string): Promise<ClimbData | null> {
   const uuid = OPENBETA_IDS[trailId];
   if (!uuid) return null;
   const { value } = await withCache(`ob-climbs:${uuid}`, { ttlSeconds: DAY, staleSeconds: 7 * DAY }, async () => {
-    const walls = nearby(trailId, collectWalls(await query(CLIMB_FIELDS, uuid))).filter((w) => w.climbs.length > 0);
+    const { root, complete } = await climbTree(uuid);
+    const walls = nearby(trailId, collectWalls(root)).filter((w) => w.climbs.length > 0);
+    if (walls.length === 0 && !complete) throw new Error("OpenBeta sub-areas did not load");
     const routes: RouteRow[] = [];
     walls.forEach((w, index) => {
       for (const climb of w.climbs) {
         const grade = climb.grades?.yds || climb.grades?.vscale || "";
         const metres = typeof climb.length === "number" && climb.length > 0 ? Math.round(climb.length) : 0;
-        routes.push([(climb.name ?? "").trim(), grade, typeCode(climb.type), metres, index]);
+        routes.push([(climb.name ?? "").trim(), grade, typeCode(climb.type), metres, index, climb.uuid ?? ""]);
       }
     });
     return {
       walls: walls.map((w) => w.wall),
       routes: routes.slice(0, ROUTE_CAP),
-      total: routes.length,
-      source: "live, refreshed daily",
+      total: Math.max(routes.length, root.totalClimbs ?? 0),
+      source: complete ? "live, refreshed daily" : "live; a few sub-areas did not load this time",
     } satisfies ClimbData;
   });
   return value;

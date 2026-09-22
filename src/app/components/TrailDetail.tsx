@@ -136,7 +136,7 @@ export default function TrailDetail({
           </div>
         ) : null}
 
-        {verdict.activity === "climb" ? <ClimbRoutes trailId={trail.id} /> : null}
+        {verdict.activity === "climb" ? <ClimbRoutes trailId={trail.id} areaName={trail.name} /> : null}
 
         {verdict.activity === "fish" ? (
           <FishGuide

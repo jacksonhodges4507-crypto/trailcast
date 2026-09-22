@@ -122,13 +122,37 @@ export function rankByProximity(
   });
 }
 
+const ACTIVITY_DAY: Record<string, string> = {
+  hike: "hiking",
+  trail_run: "running",
+  mtb: "riding",
+  climb: "climbing",
+  fish: "fishing",
+};
+
+/** Pick one phrasing per place, so answers vary but stay reproducible. */
+function pick<T>(options: T[], seed: string): T {
+  let hash = 0;
+  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return options[hash % options.length]!;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /**
- * Deterministic narrator.
+ * Scout's deterministic voice.
  *
- * This is the reference implementation, not a consolation prize: it answers
- * the same question the model is asked -- why this one and not that one --
- * from the same facts, so the ask feature is fully testable without a network
- * call and behaves sensibly with no API key at all.
+ * It talks the way a friend who knows the area would: a recommendation, the
+ * reason in one breath, what the runner-up offers, and one heads-up. It used
+ * to read like a report card on the top result ("X is the pick -- prime at
+ * 95, 7 mi and 200 ft of gain"), which answered the question but did not
+ * sound like anyone answering it.
+ *
+ * This is still the reference implementation, not a consolation prize: it
+ * makes the same comparison the language model is asked to, from the same
+ * facts, so Scout is fully testable and useful with no API key at all.
  */
 export function templateNarrative(
   query: AskQuery,
@@ -136,10 +160,11 @@ export function templateNarrative(
   today: string,
 ): string {
   const when = relativeLabel(query.date, today);
+  const doing = ACTIVITY_DAY[query.activity] ?? "getting out";
 
   const top = reports[0];
   if (!top) {
-    return `Nothing in the dataset matches ${query.interpretation}. The narrowest part of that is usually the place, the rock type or the fish \u2014 try dropping one.`;
+    return `I couldn't find anywhere for ${query.interpretation}. Nothing in the dataset matches all of that at once, so try dropping one part of it: usually the place, the rock type or the fish.`;
   }
 
   const scored = (report: TrailReport) =>
@@ -152,27 +177,58 @@ export function templateNarrative(
   if (top.verdict.grade === "unsafe" && vetoed) {
     const alternative = reports.find((r) => r.verdict.grade !== "unsafe");
     const redirect = alternative
-      ? ` ${alternative.trail.name} has no such problem and scores ${alternative.verdict.score ?? "?"}.`
-      : " Nothing else in range is clear either — pick another day.";
-    return `Don't go ${when}. ${top.trail.name} otherwise scores well, but ${lowerFirst(vetoed.reason)}${redirect}`;
+      ? ` I'd go to ${alternative.trail.name} instead; it doesn't have that problem and scores ${alternative.verdict.score ?? "?"}.`
+      : " Nothing else in range is clear either, so I'd pick another day.";
+    return `Don't go to ${top.trail.name} ${when}. It would otherwise be a good call, but ${lowerFirst(vetoed.reason)}.${redirect}`;
   }
 
   const sentences: string[] = [];
+  const seed = `${top.trail.id}|${query.date}|${query.interpretation}`;
 
   const near = top.travel
-    ? ` (${formatDrive(top.travel.minutes)} drive${top.travel.source === "estimate" ? ", estimated" : ""})`
+    ? ` (${formatDrive(top.travel.minutes)} drive${top.travel.source === "estimate" ? ", roughly" : ""})`
     : query.origin
       ? ` (${Math.round(haversineMi(query.origin, top.trail))} mi from ${query.origin.label})`
       : "";
+  const name = `${top.trail.name}${near}`;
+  const grade = top.verdict.grade;
 
-  sentences.push(
-    `${top.trail.name} in ${top.trail.region}${near} is the pick ${when} — ${gradeLabel(top.verdict.grade).toLowerCase()} at ${top.verdict.score ?? "?"}, ${top.trail.distanceMi} mi and ${top.trail.gainFt.toLocaleString()} ft of gain.`,
-  );
+  if (grade === "prime" || grade === "good") {
+    sentences.push(
+      pick(
+        [
+          `${capitalise(when)} looks like a good day for ${doing}. I'd head to ${name}.`,
+          `If I were going ${doing} ${when}, I'd go to ${name}.`,
+          `${name} is where I'd be ${when}.`,
+        ],
+        seed,
+      ),
+    );
+  } else if (grade === "marginal") {
+    sentences.push(
+      `${capitalise(when)} is a so-so day for ${doing}. Your best bet is ${name}, but keep your expectations in check.`,
+    );
+  } else {
+    sentences.push(
+      `${capitalise(when)} isn't great for ${doing} anywhere I looked. The least-bad option is ${name}.`,
+    );
+  }
+
+  // The reason, from its two strongest heavily weighted factors.
+  const strengths = scored(top)
+    .filter((f) => f.score >= 80)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 2);
+  if (strengths.length === 2) {
+    sentences.push(`${capitalise(lowerFirst(strengths[0]!.reason))}, and ${lowerFirst(strengths[1]!.reason)}.`);
+  } else if (strengths.length === 1) {
+    sentences.push(`The big thing going for it: ${lowerFirst(strengths[0]!.reason)}.`);
+  }
 
   /*
-   * The comparison is the part worth writing. A ranked list already says
+   * The comparison is the part worth saying. A ranked list already shows
    * which is first; what it cannot say is what separates first from second,
-   * which is the thing that tells you whether the order matters to you.
+   * which is what tells you whether the order matters to you.
    */
   const runnerUp = reports.find(
     (r) => r.trail.id !== top.trail.id && r.verdict.grade !== "unsafe",
@@ -201,45 +257,38 @@ export function templateNarrative(
     const extraMinutes =
       top.travel && runnerUp.travel ? top.travel.minutes - runnerUp.travel.minutes : 0;
 
-    /*
-     * The trade-off sentence. When the pick is further than the runner-up,
-     * the honest recommendation says what the extra drive buys -- and when
-     * the pick is the closer one, the drive is worth mentioning as a point in
-     * its favour. This is the comparison drive time exists to make possible.
-     */
+    // The drive trade-off, scaled to what it costs: twenty minutes for a
+    // noticeably better day is an easy call; two hours is a real decision.
     if (extraMinutes >= 20 && margin > 0) {
-      // Scale the caveat to the cost. Twenty minutes for a noticeably better
-      // day is an easy call and should read like one; two hours is a real
-      // trade-off and should be named as one.
       const pointsPerHour = margin / (extraMinutes / 60);
       sentences.push(
         extraMinutes < 45
-          ? `It is ${margin} points better than ${runnerUp.trail.name} for ${formatDrive(extraMinutes)} more each way, which is an easy trade.`
+          ? `It's ${margin} points better than ${runnerUp.trail.name} for ${formatDrive(extraMinutes)} more each way, which is an easy trade.`
           : pointsPerHour >= 8
-            ? `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way \u2014 a real trade-off, though the conditions gap justifies it.`
-            : `It is ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way \u2014 worth it if the day is the point, not if you are short on time.`,
+            ? `It's ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way. That's a real trade-off, though I think the conditions are worth it.`
+            : `It's ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way, so it's worth it if the day is the point, not if you're short on time.`,
       );
     } else if (extraMinutes <= -20) {
       sentences.push(
         `It also beats ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on the drive, by ${formatDrive(-extraMinutes)} each way.`,
       );
-    } else if (widest && widest.gap > 2 && widest.better && widest.worse) {
-      sentences.push(
-        `It edges out ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on ${widest.label} — ${widest.better} against ${widest.worse}.`,
-      );
     } else if (margin <= 3) {
       sentences.push(
-        `${runnerUp.trail.name} at ${runnerUp.verdict.score ?? "?"} is effectively the same day, so take whichever is closer.`,
+        `${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is basically just as good, so go with whichever is easier for you to get to.`,
+      );
+    } else if (widest && widest.gap > 2 && widest.better && widest.worse) {
+      sentences.push(
+        `If that doesn't work, ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is the backup; it loses mostly on ${widest.label}, ${widest.worse} against ${widest.better}.`,
       );
     } else {
-      sentences.push(`${runnerUp.trail.name} is next at ${runnerUp.verdict.score ?? "?"}.`);
+      sentences.push(`If that doesn't work, ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is a solid backup.`);
     }
   }
 
   if (query.preferShade && !top.trail.exposed) {
-    sentences.push("It is also one of the shaded options, as asked.");
+    sentences.push("It's one of the shadier options too, like you asked.");
   } else if (query.preferShade && top.trail.exposed) {
-    sentences.push("It is exposed rather than shaded, but the conditions gap outweighed that.");
+    sentences.push("It's more exposed than you wanted, but the conditions gap made up for it.");
   }
 
   const crowd = crowdSentence(top);
@@ -249,13 +298,13 @@ export function templateNarrative(
   // useful kind, even when the day genuinely is good.
   const weakest = scored(top).slice().sort((a, b) => a.score - b.score)[0];
   if (weakest && weakest.score < 75) {
-    sentences.push(`Worth knowing: ${lowerFirst(weakest.reason)}.`);
+    sentences.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
   }
 
   const missing = top.verdict.factors.filter((f) => f.score === undefined);
   if (missing.length > 0) {
     sentences.push(
-      `No data for ${missing.map((f) => f.label.toLowerCase()).join(" or ")}, so that is unaccounted for.`,
+      `I don't have ${missing.map((f) => f.label.toLowerCase()).join(" or ")} data for it, so I can't vouch for that part.`,
     );
   }
 

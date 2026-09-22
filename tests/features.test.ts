@@ -316,3 +316,16 @@ describe("quick stats", () => {
     expect(stats[3]).toEqual({ value: "136", label: "Routes" });
   });
 });
+
+import { templateNarrative } from "@/lib/ask/answer";
+
+describe("Scout's voice", () => {
+  it("answers like a person, not a report", () => {
+    const t = trail({ id: "friendly", name: "Friendly Trail" });
+    const report: TrailReport = { trail: t, conditions: goodConditions(), verdict: scoreTrail(t, goodConditions(), "hike") };
+    const text = templateNarrative(parseQuery("hike saturday", "2026-09-17"), [report], "2026-09-17");
+    expect(text).toMatch(/I'd/);
+    expect(text).toContain("Friendly Trail");
+    expect(text).not.toMatch(/is the pick/);
+  });
+});

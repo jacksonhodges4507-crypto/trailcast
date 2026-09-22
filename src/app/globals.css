@@ -1992,7 +1992,8 @@ button {
   }
 
   /* One view at a time; the map gets the whole screen when it is shown. */
-  .workspace.view-list .canvas {
+  /* Only the Map tab shows the map; the others get the whole screen. */
+  .workspace:not(.view-map) .canvas {
     display: none;
   }
 
@@ -2265,29 +2266,50 @@ button {
 }
 
 .scout .ask-history ul {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
 }
 
 .scout .ask-history li {
   gap: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--bg-elevated);
-  max-width: 100%;
+  align-items: stretch;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.scout .ask-history li:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
 }
 
 .scout .ask-history-item {
-  flex: 0 1 auto;
-  padding: 6px 4px 6px 11px;
+  flex: 1;
+  padding: 9px 6px 9px 12px;
   color: var(--text);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: normal;
+  text-overflow: clip;
+  overflow: visible;
+  align-items: flex-start;
+  border-radius: 12px;
+}
+
+.scout .ask-history-item:hover {
+  background: transparent;
+}
+
+.scout .ask-history-item span {
+  color: var(--ember);
+  margin-top: 1px;
 }
 
 .scout .ask-history-remove {
-  padding: 4px 9px 4px 4px;
+  padding: 4px 11px;
+  border-radius: 0 12px 12px 0;
 }
 
 .scout .ask-row {
@@ -2800,4 +2822,97 @@ button {
   .desktop-hide {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Desktop: the column under the pointer widens, so whichever side you are
+   reading gets the room. Delayed a touch so sweeping across does not jolt.
+--------------------------------------------------------------------------- */
+@media (min-width: 901px) {
+  .workspace {
+    grid-template-columns: minmax(310px, 370px) 1fr 0px;
+    transition: grid-template-columns 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) 0.06s;
+  }
+
+  .workspace.has-detail {
+    grid-template-columns: minmax(290px, 340px) 1fr minmax(380px, 470px);
+  }
+
+  .workspace:has(.rail:hover) {
+    grid-template-columns: minmax(380px, 440px) 1fr 0px;
+  }
+
+  .workspace.has-detail:has(.rail:hover) {
+    grid-template-columns: minmax(380px, 440px) 1fr minmax(360px, 420px);
+  }
+
+  .workspace.has-detail:has(.detail:hover) {
+    grid-template-columns: minmax(270px, 310px) 1fr minmax(500px, 580px);
+  }
+
+  .rail,
+  .detail {
+    transition: box-shadow 0.3s ease;
+  }
+
+  .rail:hover,
+  .detail:hover {
+    box-shadow: 0 0 0 1px var(--border-strong), 0 12px 40px rgba(var(--shadow-rgb), 0.18);
+    position: relative;
+    z-index: 3;
+  }
+}
+
+/* ---- look-it-up links: flies, lures, routes, walls ---- */
+
+.fish-picks strong a,
+a.climb-name {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.fish-picks strong a:hover,
+a.climb-name:hover {
+  text-decoration-color: var(--ember);
+}
+
+.fish-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fish-links a,
+.climb-meta a,
+.climbs-wall-links a {
+  color: var(--ember);
+  text-decoration: none;
+}
+
+.fish-links a:hover,
+.climb-meta a:hover,
+.climbs-wall-links a:hover {
+  text-decoration: underline;
+}
+
+.climbs-wall-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.climbs-wall-links strong {
+  font-size: 14px;
+  margin-right: auto;
 }

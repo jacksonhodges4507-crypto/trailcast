@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-/** One route: [name, grade, type code, length in metres (0 = unknown), wall index]. */
-type RouteRow = [string, string, string, number, number];
+/** One route: [name, grade, type code, length in metres (0 = unknown), wall index, OpenBeta id]. */
+type RouteRow = [string, string, string, number, number, string?];
 
 interface ClimbData {
-  walls: { n: string; lat: number; lng: number; c: number }[];
+  walls: { n: string; u?: string; lat: number; lng: number; c: number }[];
   routes: RouteRow[];
   /** Routes OpenBeta lists for the area, including any trimmed from this file. */
   total: number;
@@ -34,7 +34,12 @@ const PAGE = 25;
  * Fetched live (and cached for a day at the edge) when an area is opened,
  * so thousands of route names never ride along in the page bundle.
  */
-export default function ClimbRoutes({ trailId }: { trailId: string }) {
+/** Search links, so anyone can see what a wall or route looks like. */
+function photosUrl(...parts: string[]): string {
+  return `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${parts.filter(Boolean).join(" ")} climbing Utah`)}`;
+}
+
+export default function ClimbRoutes({ trailId, areaName }: { trailId: string; areaName?: string }) {
   const [data, setData] = useState<ClimbData | null>(null);
   const [missing, setMissing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -48,8 +53,13 @@ export default function ClimbRoutes({ trailId }: { trailId: string }) {
     setWall(null);
     setFilter("all");
     setShown(PAGE);
-    fetch(`/api/climbs?id=${encodeURIComponent(trailId)}`)
-      .then((r) => (r.ok ? (r.json() as Promise<ClimbData>) : Promise.reject(new Error("none"))))
+    // One retry: a first request for a big area can land on a cold cache.
+    const load = () =>
+      fetch(`/api/climbs?id=${encodeURIComponent(trailId)}`).then((r) =>
+        r.ok ? (r.json() as Promise<ClimbData>) : Promise.reject(new Error("none")),
+      );
+    load()
+      .catch(() => new Promise((resolve) => setTimeout(resolve, 1500)).then(load))
       .then((d) => {
         if (!cancelled) setData(d);
       })
@@ -116,6 +126,27 @@ export default function ClimbRoutes({ trailId }: { trailId: string }) {
         </div>
       ) : null}
 
+      {wall !== null && data.walls[wall] ? (
+        <div className="climbs-wall-links">
+          <strong>{data.walls[wall]!.n}</strong>
+          {data.walls[wall]!.u ? (
+            <a href={`https://openbeta.io/area/${data.walls[wall]!.u}`} target="_blank" rel="noreferrer noopener">
+              Wall page
+            </a>
+          ) : null}
+          <a href={photosUrl(data.walls[wall]!.n, areaName ?? "")} target="_blank" rel="noreferrer noopener">
+            Photos
+          </a>
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${data.walls[wall]!.lat},${data.walls[wall]!.lng}`}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Directions
+          </a>
+        </div>
+      ) : null}
+
       <div className="climbs-filters" role="group" aria-label="Route type">
         {FILTERS.filter((f) => f === "all" || (counts[f] ?? 0) > 0).map((f) => (
           <button key={f} type="button" aria-pressed={filter === f} onClick={() => { setFilter(f); setShown(PAGE); }}>
@@ -130,12 +161,28 @@ export default function ClimbRoutes({ trailId }: { trailId: string }) {
         <ul className="climbs-list">
           {rows.slice(0, shown).map((r, index) => (
             <li key={`${r[0]}-${index}`}>
-              <span className="climb-name">{r[0]}</span>
+              <a
+                className="climb-name"
+                href={r[5] ? `https://openbeta.io/climb/${r[5]}` : photosUrl(r[0], data.walls[r[4]]?.n ?? "", areaName ?? "")}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={r[5] ? "Open this route on OpenBeta (description, topo, photos)" : "Search for this route"}
+              >
+                {r[0]}
+              </a>
               <span className="climb-grade">{r[1] || "?"}</span>
               <span className="climb-meta">
                 {TYPE_LABEL[r[2]] ?? ""}
                 {r[3] > 0 ? ` · ${Math.round(r[3] * 3.281)} ft` : ""}
                 {wall === null && data.walls[r[4]] ? ` · ${data.walls[r[4]]!.n}` : ""}
+                {" · "}
+                <a
+                  href={photosUrl(r[0], data.walls[r[4]]?.n ?? "", areaName ?? "")}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  photos
+                </a>
               </span>
             </li>
           ))}

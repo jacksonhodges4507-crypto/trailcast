@@ -3,6 +3,20 @@
 import { fishingGuide } from "@/lib/fishing/guide";
 import type { SpeciesId } from "@/lib/fishing/species";
 
+/*
+ * Links, not images: a fly's name is enough for an image search to show
+ * exactly what it looks like, and a shopping search lists local and online
+ * shops without TrailCast picking a seller.
+ */
+function lookUrl(name: string, kind: string): string {
+  return `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${name} ${kind}`)}`;
+}
+
+function shopUrl(name: string, size: string | undefined, kind: string): string {
+  const sized = size && size.startsWith("#") ? ` size ${size.replace(/[–-].*/, "")}` : "";
+  return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${name}${sized} ${kind}`)}`;
+}
+
 export interface FishGuideProps {
   trailId: string;
   date: string;
@@ -59,9 +73,21 @@ export default function FishGuide({ trailId, date, onOpenSpecies }: FishGuidePro
           <ul className="fish-picks">
             {guide.flies.map((fly) => (
               <li key={fly.name}>
-                <strong>{fly.name}</strong>
+                <strong>
+                  <a href={lookUrl(fly.name, "fly fishing fly")} target="_blank" rel="noreferrer noopener" title="See what it looks like">
+                    {fly.name}
+                  </a>
+                </strong>
                 {fly.size ? <span className="fish-size">{fly.size}</span> : null}
                 <span className="fish-why">{fly.why}</span>
+                <span className="fish-links">
+                  <a href={lookUrl(fly.name, "fly fishing fly")} target="_blank" rel="noreferrer noopener">
+                    See it
+                  </a>
+                  <a href={shopUrl(fly.name, fly.size, "fly")} target="_blank" rel="noreferrer noopener">
+                    Where to buy
+                  </a>
+                </span>
               </li>
             ))}
           </ul>
@@ -73,9 +99,21 @@ export default function FishGuide({ trailId, date, onOpenSpecies }: FishGuidePro
         <ul className="fish-picks">
           {guide.lures.map((lure) => (
             <li key={lure.name}>
-              <strong>{lure.name}</strong>
+              <strong>
+                <a href={lookUrl(lure.name, "fishing lure")} target="_blank" rel="noreferrer noopener" title="See what it looks like">
+                  {lure.name}
+                </a>
+              </strong>
               {lure.size ? <span className="fish-size">{lure.size}</span> : null}
               <span className="fish-why">{lure.why}</span>
+              <span className="fish-links">
+                <a href={lookUrl(lure.name, "fishing lure")} target="_blank" rel="noreferrer noopener">
+                  See it
+                </a>
+                <a href={shopUrl(lure.name, lure.size, "lure")} target="_blank" rel="noreferrer noopener">
+                  Where to buy
+                </a>
+              </span>
             </li>
           ))}
         </ul>
