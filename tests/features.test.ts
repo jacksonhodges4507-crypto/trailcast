@@ -297,3 +297,22 @@ describe("crowd sentence", () => {
     expect(sentence).not.toMatch(/dry/i);
   });
 });
+
+import { quickStats } from "@/lib/format";
+
+describe("quick stats", () => {
+  it("formats the glance numbers and dashes what is missing", () => {
+    const stats = quickStats({
+      trail: { distanceMi: 6.4 },
+      conditions: { tempMaxF: 63.6, windMph: 7.7 },
+      verdict: { activity: "hike" },
+    });
+    expect(stats.map((s) => s.value)).toEqual(["64°F", "8 mph", "—", "6.4 mi"]);
+    expect(stats.map((s) => s.label)).toEqual(["High", "Wind", "Rain", "Length"]);
+  });
+
+  it("counts routes for climbing instead of a length", () => {
+    const stats = quickStats({ trail: { distanceMi: 0.5, routes: 136 }, conditions: {}, verdict: { activity: "climb" } });
+    expect(stats[3]).toEqual({ value: "136", label: "Routes" });
+  });
+});

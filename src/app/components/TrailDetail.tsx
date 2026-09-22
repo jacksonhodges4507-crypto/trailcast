@@ -2,7 +2,8 @@
 
 import type { TrailReport } from "@/lib/types";
 import { ACTIVITIES } from "@/lib/activities";
-import { formatDrive, routeFigures } from "@/lib/format";
+import { formatDrive, quickStats, routeFigures } from "@/lib/format";
+import { Hero } from "./Brand";
 import FishGuide from "./FishGuide";
 import UserReports from "./UserReports";
 import Directions from "./Directions";
@@ -22,6 +23,10 @@ export interface TrailDetailProps {
   onClose: () => void;
   /** Open a species in the Fish Dex; supplied on fishing waters. */
   onOpenSpecies?: (id: SpeciesId) => void;
+  saved?: boolean;
+  onToggleSave?: () => void;
+  /** Hand a question about this place to Scout. */
+  onAskScout?: () => void;
 }
 
 /**
@@ -32,7 +37,14 @@ export interface TrailDetailProps {
  * statistic. They are now two separate labelled bars: how good the factor is
  * today, and how much it counts toward this activity's score.
  */
-export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDetailProps) {
+export default function TrailDetail({
+  report,
+  onClose,
+  onOpenSpecies,
+  saved,
+  onToggleSave,
+  onAskScout,
+}: TrailDetailProps) {
   const { trail, verdict, conditions, travel } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
 
@@ -50,8 +62,29 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
 
   return (
     <aside className="detail">
+      <div className="detail-cover">
+        <Hero tone={verdict.grade === "unsafe" || verdict.grade === "poor" ? "#C8561E" : "#E8A15F"} />
+        <div className="detail-cover-actions">
+          <button className="round-btn" onClick={onClose} aria-label="Close details">
+            ×
+          </button>
+          {onToggleSave ? (
+            <button
+              className="round-btn"
+              onClick={onToggleSave}
+              aria-pressed={saved}
+              aria-label={saved ? "Remove from saved" : "Save this place"}
+              title={saved ? "Saved" : "Save"}
+            >
+              {saved ? "★" : "☆"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       <div className="detail-head">
         <div>
+          <div className="detail-kicker">{ACTIVITIES[verdict.activity].label}</div>
           <h2>{trail.name}</h2>
           <div className="card-region">
             {[`${trail.region}, ${trail.state}`, ...routeFigures(trail, verdict.activity)].join(" · ")}
@@ -61,13 +94,34 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
             {trail.routes ? ` · ${trail.routes} routes` : ""}
           </div>
         </div>
-        <button className="detail-close" onClick={onClose} aria-label="Close details">
-          ×
-        </button>
+        <div className="score-ring" style={{ borderColor: GRADE_COLOR[verdict.grade], color: GRADE_COLOR[verdict.grade] }}>
+          <strong>{verdict.score ?? "–"}</strong>
+          <span>{GRADE_TEXT[verdict.grade]}</span>
+        </div>
       </div>
 
       <div className="detail-body">
+        <div className="verdict-card">
+          <div className="verdict-kicker">The call</div>
+          <p>{verdict.headline}</p>
+        </div>
+
+        <div className="stat-tiles">
+          {quickStats(report).map((stat) => (
+            <div key={stat.label}>
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </div>
+          ))}
+        </div>
+
         <p className="detail-blurb">{trail.blurb}</p>
+
+        {onAskScout ? (
+          <button type="button" className="ask-scout-btn" onClick={onAskScout}>
+            <span aria-hidden>✦</span> Ask Scout about this place
+          </button>
+        ) : null}
 
         <Directions name={trail.name} lat={trail.lat} lon={trail.lon} />
 
@@ -81,13 +135,6 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
             </span>
           </div>
         ) : null}
-
-        <div
-          className="card-headline"
-          style={{ marginBottom: 14, color: GRADE_COLOR[verdict.grade] }}
-        >
-          {verdict.headline}
-        </div>
 
         {verdict.activity === "climb" ? <ClimbRoutes trailId={trail.id} /> : null}
 

@@ -44,3 +44,40 @@ export function routeFigures(route: RouteLike, activity: string): string[] {
 export function formatTrip(minutes: number, miles: number): string {
   return `${formatDrive(minutes)} drive · ${miles} mi away`;
 }
+
+interface StatSource {
+  trail: { distanceMi: number; sourceName?: string; routes?: number };
+  conditions: { tempMaxF?: number; windMph?: number; windGustMph?: number; precipitationChancePct?: number };
+  verdict: { activity: string };
+}
+
+export interface QuickStat {
+  value: string;
+  label: string;
+}
+
+/**
+ * The four numbers someone glances at before anything else: temperature,
+ * wind, chance of rain, and how big the outing is. Missing readings show a
+ * dash rather than a guess, same as everywhere else.
+ */
+export function quickStats(report: StatSource): QuickStat[] {
+  const { conditions, trail, verdict } = report;
+  const dash = "—";
+  const size =
+    verdict.activity === "climb"
+      ? { value: trail.routes ? `${trail.routes}` : dash, label: "Routes" }
+      : trail.sourceName === "OpenBeta"
+        ? { value: dash, label: "Length" }
+        : { value: `${trail.distanceMi} mi`, label: verdict.activity === "fish" ? "Access" : "Length" };
+
+  return [
+    { value: conditions.tempMaxF !== undefined ? `${Math.round(conditions.tempMaxF)}°F` : dash, label: "High" },
+    { value: conditions.windMph !== undefined ? `${Math.round(conditions.windMph)} mph` : dash, label: "Wind" },
+    {
+      value: conditions.precipitationChancePct !== undefined ? `${Math.round(conditions.precipitationChancePct)}%` : dash,
+      label: "Rain",
+    },
+    size,
+  ];
+}

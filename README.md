@@ -24,7 +24,7 @@ verdict and where that number came from.
 | **Joins against** | a curated trail dataset with soil type, rock type, aspect, exposure and stream crossings |
 | **Scores** | seven weighted factors, re-weighted per activity (hiking, trail running, mountain biking, climbing) |
 | **Explains** | a plain-English reason per factor, a headline, and a source link with a fetch timestamp for every value |
-| **Answers** | natural-language questions — *"where should I ride Saturday near Park City?"* |
+| **Scout** | the assistant: natural-language questions — *"where should I ride Saturday near Park City?"* |
 | **Listens** | visitor reports, shown only once two different people agree |
 | **Guides** | what fish are eating this month, flies and lures per water, and a Fish Dex of Utah trout |
 
@@ -304,7 +304,7 @@ dropping the data. → [`sources/batch.ts`](src/lib/sources/batch.ts)
 
 ---
 
-## Different questions, different answers
+## Scout: different questions, different answers
 
 The deterministic parser used to understand only activity, day, place and
 explicit distances, so "somewhere shady", "an easy one" and "something with a

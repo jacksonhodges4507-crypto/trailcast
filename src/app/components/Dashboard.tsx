@@ -7,8 +7,9 @@ import FishDex from "./FishDex";
 import type { SpeciesId } from "@/lib/fishing/species";
 import AskBar from "./AskBar";
 import ThemeToggle from "./ThemeToggle";
-import { formatDrive, routeFigures } from "@/lib/format";
-import { GRADE_CLASS, GRADE_TEXT } from "./grade";
+import { Logo, Wordmark } from "./Brand";
+import { formatDrive, quickStats, routeFigures } from "@/lib/format";
+import { GRADE_CLASS, GRADE_COLOR, GRADE_TEXT } from "./grade";
 import { ACTIVITIES, ACTIVITY_IDS } from "@/lib/activities";
 import { forecastWindow, relativeLabel, weekdayName } from "@/lib/dates";
 import type { ActivityId, AskAnswer, ConditionsResponse, SourceStatus } from "@/lib/types";
@@ -16,6 +17,39 @@ import type { ActivityId, AskAnswer, ConditionsResponse, SourceStatus } from "@/
 export interface DashboardProps {
   initial: ConditionsResponse;
   today: string;
+}
+
+type MobileView = "map" | "scout" | "saved" | "you";
+
+const SAVED_KEY = "trailcast.saved.v1";
+
+function readSaved(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(SAVED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSaved(ids: string[]): void {
+  try {
+    window.localStorage.setItem(SAVED_KEY, JSON.stringify(ids));
+  } catch {
+    // Storage blocked: saving still works for this visit.
+  }
+}
+
+function isPhone(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(max-width: 900px)").matches === true;
+}
+
+function TabIcon({ name }: { name: MobileView }) {
+  const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  if (name === "map") return <svg {...common}><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" /><path d="M9 4v14M15 6v14" /></svg>;
+  if (name === "scout") return <svg {...common}><path d="M12 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7Z" /></svg>;
+  if (name === "saved") return <svg {...common}><path d="M6 3h12v18l-6-4-6 4V3Z" /></svg>;
+  return <svg {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></svg>;
 }
 
 function SourceChips({ status, degraded }: { status: SourceStatus[]; degraded: boolean }) {
@@ -63,6 +97,8 @@ export default function Dashboard({ initial, today }: DashboardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Free-text filter over names and regions, shared by the list and the map.
+  const [search, setSearch] = useState("");
 
   // The Fish Dex shares the right-hand column with a water's detail.
   const [dexOpen, setDexOpen] = useState(false);
@@ -174,24 +210,102 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     if (top) setSelectedId(top.trail.id);
   }, []);
 
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return data.reports;
+    return data.reports.filter((r) =>
+      `${r.trail.name} ${r.trail.region}`.toLowerCase().includes(needle),
+    );
+  }, [data.reports, search]);
+
   const listed = useMemo(() => {
-    if (sortBy !== "closest") return data.reports;
-    return data.reports
+    if (sortBy !== "closest") return visible;
+    return visible
       .slice()
       .sort(
         (a, b) =>
           (a.travel?.minutes ?? Number.POSITIVE_INFINITY) -
           (b.travel?.minutes ?? Number.POSITIVE_INFINITY),
       );
-  }, [data.reports, sortBy]);
+  }, [visible, sortBy]);
 
   /*
    * Phones get two tabs instead of a list stacked on a squeezed map: "Ask"
    * (the question box, answer and list) and "Map" (the map, full height).
    * On wider screens both are visible and the tabs are hidden by CSS.
    */
-  const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const [mobileView, setMobileView] = useState<MobileView>("map");
   const showMap = useCallback(() => setMobileView("map"), []);
+
+  /*
+   * On the phone map, tapping a pin shows a short "peek" card first; the full
+   * conditions open as a sheet only when asked for, so the map stays usable.
+   */
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Places the viewer has starred. Kept in this browser only.
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  useEffect(() => {
+    setSavedIds(readSaved());
+  }, []);
+  const toggleSave = useCallback((id: string) => {
+    setSavedIds((current) => {
+      const next = current.includes(id) ? current.filter((x) => x !== id) : [id, ...current];
+      writeSaved(next);
+      return next;
+    });
+  }, []);
+
+
+  // "Ask Scout about this place" hands a question to the Scout panel.
+  const [scoutPrefill, setScoutPrefill] = useState<{ text: string; nonce: number } | null>(null);
+
+  /** A card in a list: open the full conditions straight away. */
+  const openFromList = useCallback((id: string) => {
+    setSelectedId(id);
+    setSheetOpen(true);
+  }, []);
+
+  /** A pin: on a phone show the peek card; on a desktop toggle the column. */
+  const selectFromMap = useCallback((id: string) => {
+    if (isPhone()) {
+      setSelectedId(id);
+      setSheetOpen(false);
+    } else {
+      setSelectedId((current) => (current === id ? null : id));
+    }
+  }, []);
+
+  /** A Scout pick: on a phone jump to the map with the peek card up. */
+  const pickFromScout = useCallback((id: string) => {
+    setSelectedId(id);
+    if (isPhone()) {
+      setMobileView("map");
+      setSheetOpen(false);
+    } else {
+      setSheetOpen(true);
+    }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    // On the phone map, closing the sheet returns to the peek card.
+    if (isPhone() && mobileView === "map") setSheetOpen(false);
+    else {
+      setSheetOpen(false);
+      setSelectedId(null);
+    }
+  }, [mobileView]);
+
+  const askScoutAbout = useCallback(
+    (report: { trail: { name: string }; verdict: { activity: ActivityId; date: string } }) => {
+      const day = relativeLabel(report.verdict.date, today);
+      const verb = ACTIVITIES[report.verdict.activity].label.toLowerCase();
+      setScoutPrefill({ text: `How is ${report.trail.name} for ${verb} ${day}?`, nonce: Date.now() });
+      setMobileView("scout");
+      setSheetOpen(false);
+    },
+    [today],
+  );
 
   const selected = useMemo(
     () => data.reports.find((report) => report.trail.id === selectedId) ?? null,
@@ -202,10 +316,13 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     <div className="shell">
       <header className="masthead">
         <div className="brand">
-          <h1>TrailCast</h1>
-          <span className="tagline">
-            live conditions, scored per trail, with receipts
-          </span>
+          <Logo size={34} />
+          <div>
+            <h1>
+              <Wordmark />
+            </h1>
+            <span className="tagline">The forecast for where you&apos;re going, not where you are.</span>
+          </div>
         </div>
         <div className="masthead-right">
           {data.available > data.scored ? (
@@ -221,10 +338,10 @@ export default function Dashboard({ initial, today }: DashboardProps) {
       {error ? <div className="banner">{error}</div> : null}
 
       <div
-        className={`workspace view-${mobileView}${selected || dexOpen ? " has-detail" : ""}`}
+        className={`workspace view-${mobileView}${selected || dexOpen ? " has-detail" : ""}${sheetOpen || dexOpen ? " sheet-open" : ""}`}
       >
         <div className="rail">
-          <div className="controls">
+          <div className="controls sec-controls">
             <div className="segmented" role="group" aria-label="Activity">
               {ACTIVITY_IDS.map((id) => (
                 <button
@@ -254,7 +371,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
           </div>
 
           {activity === "fish" ? (
-            <div className="dex-launch">
+            <div className="dex-launch sec-list">
               <button type="button" onClick={() => openSpecies(null)}>
                 <span aria-hidden>{"📖"}</span> Fish Dex
               </button>
@@ -262,7 +379,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             </div>
           ) : null}
 
-          <div className="locate">
+          <div className="locate sec-you">
             {coords ? (
               <>
                 <span>
@@ -297,7 +414,75 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             {locError ? <span className="locate-error">{locError}</span> : null}
           </div>
 
-          <AskBar onAnswer={handleAnswer} coords={coords} onShowMap={showMap} />
+          <div className="sec-scout">
+            <AskBar
+              onAnswer={handleAnswer}
+              coords={coords}
+              onShowMap={showMap}
+              onPick={pickFromScout}
+              prefill={scoutPrefill}
+            />
+          </div>
+
+          <div className="you-extra sec-you mobile-only">
+            <div className="you-row">
+              <span>Appearance</span>
+              <ThemeToggle />
+            </div>
+            <div className="you-row you-sources">
+              <span>Live sources</span>
+              <SourceChips status={data.sourceStatus} degraded={data.degraded} />
+            </div>
+            <p className="you-note">
+              TrailCast keeps nothing about you on a server. Saved places and search
+              history stay in this browser; your location is used once, rounded to
+              about a kilometre, and never stored.
+            </p>
+          </div>
+
+          <div className={`saved-section sec-saved${savedIds.length === 0 ? " desktop-hide" : ""}`}>
+            <h3>
+              <span aria-hidden>★</span> Saved
+            </h3>
+            {savedIds.length === 0 ? (
+              <p className="saved-empty">
+                Tap ☆ on any place to keep it here for quick checks.
+              </p>
+            ) : (
+              <div className="saved-list">
+                {savedIds.map((id) => {
+                  const report = data.reports.find((r) => r.trail.id === id);
+                  if (!report) return null;
+                  return (
+                    <button key={id} type="button" className="saved-item" onClick={() => openFromList(id)}>
+                      <span className="pick-score" style={{ background: GRADE_COLOR[report.verdict.grade] }}>
+                        {report.verdict.score ?? "–"}
+                      </span>
+                      <span className="pick-body">
+                        <strong>{report.trail.name}</strong>
+                        <span>{report.verdict.headline}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {savedIds.every((id) => !data.reports.some((r) => r.trail.id === id)) ? (
+                  <p className="saved-empty">
+                    Your saved places are for another activity — switch activity to see them.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div className="search-box sec-list">
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search trails, crags, lakes"
+              aria-label="Search places"
+            />
+          </div>
 
           {loading ? (
             <div className="loading">Scoring {ACTIVITIES[activity].label.toLowerCase()} conditions…</div>
@@ -307,17 +492,13 @@ export default function Dashboard({ initial, today }: DashboardProps) {
               in a moment.
             </div>
           ) : (
-            <div className="list">
+            <div className="list sec-list">
               {listed.map((report) => (
                 <button
                   key={report.trail.id}
                   className="card"
                   aria-selected={selectedId === report.trail.id}
-                  onClick={() =>
-                    setSelectedId((current) =>
-                      current === report.trail.id ? null : report.trail.id,
-                    )
-                  }
+                  onClick={() => openFromList(report.trail.id)}
                 >
                   <div className="card-top">
                     <div>
@@ -378,11 +559,91 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
         <div className="canvas">
           <MapView
-            reports={data.reports}
+            reports={visible}
             selectedId={selectedId}
-            onSelect={(id) => setSelectedId((current) => (current === id ? null : id))}
+            onSelect={selectFromMap}
             activity={activity}
           />
+
+          <div className="map-top mobile-only">
+            <div className="map-search">
+              <span aria-hidden>⌕</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search trails, crags, lakes"
+                aria-label="Search places"
+              />
+              <select
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                aria-label="Day"
+              >
+                {days.map((day) => (
+                  <option key={day} value={day}>
+                    {day === today ? "Today" : weekdayName(day).slice(0, 3)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="map-chips" role="group" aria-label="Activity">
+              {ACTIVITY_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={activity === id}
+                  onClick={() => {
+                    setActivity(id);
+                    if (id !== "fish") setDexOpen(false);
+                  }}
+                >
+                  {ACTIVITIES[id].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {selected && !sheetOpen ? (
+            <div className="peek mobile-only">
+              <div className="peek-top">
+                <div>
+                  <div className="detail-kicker">{ACTIVITIES[selected.verdict.activity].label}</div>
+                  <div className="peek-name">{selected.trail.name}</div>
+                </div>
+                <div className="peek-score" style={{ background: GRADE_COLOR[selected.verdict.grade] }}>
+                  <strong>{selected.verdict.score ?? "–"}</strong>
+                  <span>{GRADE_TEXT[selected.verdict.grade]}</span>
+                </div>
+              </div>
+              <div className="peek-stats">
+                {quickStats(selected).map((stat) => (
+                  <div key={stat.label}>
+                    <strong>{stat.value}</strong>
+                    <span>{stat.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="peek-line">{selected.verdict.headline}</p>
+              <div className="peek-actions">
+                <button type="button" className="cta" onClick={() => setSheetOpen(true)}>
+                  See full conditions
+                </button>
+                <button
+                  type="button"
+                  className="round-btn"
+                  aria-label={savedIds.includes(selected.trail.id) ? "Remove from saved" : "Save this place"}
+                  aria-pressed={savedIds.includes(selected.trail.id)}
+                  onClick={() => toggleSave(selected.trail.id)}
+                >
+                  {savedIds.includes(selected.trail.id) ? "★" : "☆"}
+                </button>
+                <button type="button" className="round-btn" aria-label="Close" onClick={() => setSelectedId(null)}>
+                  ×
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="legend">
             <span>
@@ -423,21 +684,38 @@ export default function Dashboard({ initial, today }: DashboardProps) {
         ) : selected ? (
           <TrailDetail
             report={selected}
-            onClose={() => setSelectedId(null)}
+            onClose={closeDetail}
             onOpenSpecies={openSpecies}
+            saved={savedIds.includes(selected.trail.id)}
+            onToggleSave={() => toggleSave(selected.trail.id)}
+            onAskScout={() => askScoutAbout(selected)}
           />
         ) : null}
       </div>
 
       <nav className="mobile-tabs" aria-label="View">
-        <button type="button" aria-pressed={mobileView === "list"} onClick={() => setMobileView("list")}>
-          <span aria-hidden>💬</span>
-          Ask &amp; list
-        </button>
-        <button type="button" aria-pressed={mobileView === "map"} onClick={() => setMobileView("map")}>
-          <span aria-hidden>🗺️</span>
-          Map
-        </button>
+        {(
+          [
+            ["map", "Map"],
+            ["scout", "Scout"],
+            ["saved", "Saved"],
+            ["you", "You"],
+          ] as const
+        ).map(([view, label]) => (
+          <button
+            key={view}
+            type="button"
+            aria-pressed={mobileView === view}
+            onClick={() => {
+              setMobileView(view);
+              setSheetOpen(false);
+              setDexOpen(false);
+            }}
+          >
+            <TabIcon name={view} />
+            {label}
+          </button>
+        ))}
       </nav>
     </div>
   );
