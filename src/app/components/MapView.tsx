@@ -35,7 +35,11 @@ const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplib
  */
 const STYLE_URL = {
   light: "https://tiles.openfreemap.org/styles/liberty",
-  dark: "https://tiles.openfreemap.org/styles/dark",
+  // OpenFreeMap's "dark" style rendered as a near-black field that was slow
+  // to finish loading, so the map read as broken. The bone-toned Liberty
+  // style matches the brand in both themes, the way most map apps stay
+  // light under a dark interface.
+  dark: "https://tiles.openfreemap.org/styles/liberty",
 } as const;
 
 type Theme = keyof typeof STYLE_URL;
