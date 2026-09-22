@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AskAnswer } from "@/lib/types";
 
 const SUGGESTIONS = [
@@ -18,6 +18,17 @@ export interface AskBarProps {
 
 export default function AskBar({ onAnswer, coords }: AskBarProps) {
   const [question, setQuestion] = useState("");
+  const boxRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Grow with the text, up to about six lines, then scroll. A one-line input
+  // hid everything past the first forty characters, which made editing a
+  // longer question a matter of arrowing blind.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 150)}px`;
+  }, [question]);
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +73,19 @@ export default function AskBar({ onAnswer, coords }: AskBarProps) {
           void submit(question);
         }}
       >
-        <input
+        <textarea
+          ref={boxRef}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Ask: where should I hike saturday?"
+          onKeyDown={(event) => {
+            // Enter asks; Shift+Enter makes a new line.
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit(question);
+            }
+          }}
+          rows={3}
+          placeholder="Ask anything — e.g. somewhere shady and easy to hike saturday near Provo"
           aria-label="Ask about conditions"
           maxLength={400}
         />

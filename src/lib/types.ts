@@ -1,3 +1,4 @@
+import type { ConfirmedReport } from "./reports/kinds";
 /**
  * Core domain types for TrailCast.
  *
@@ -231,6 +232,11 @@ export interface TrailReport {
   verdict: Verdict;
   /** Present only when the request carried an origin. */
   travel?: Travel;
+  /**
+   * Visitor reports confirmed by 2+ distinct people in the last 48 h.
+   * Unverified by any sensor, so they inform the narrative and never the score.
+   */
+  crowd?: ConfirmedReport[];
 }
 
 export interface ConditionsResponse {
@@ -260,6 +266,18 @@ export interface AskQuery {
   withinMi?: number;
   maxDistanceMi?: number;
   maxGainFt?: number;
+  /** Minimum climbing, for "a hard one" / "a big day". */
+  minGainFt?: number;
+  /** Rank shaded places up ("somewhere shady", "stay cool"). */
+  preferShade?: boolean;
+  /** Rank sun-facing places up ("somewhere warm", "in the sun"). */
+  preferSun?: boolean;
+  /** Only places with a lake or waterfall. */
+  wantsWater?: boolean;
+  /** Only crags of this rock. */
+  rockType?: RockType;
+  /** Only waters holding this fish (a Fish Dex species id). */
+  species?: string;
   /** How the caller's phrasing was turned into this query. */
   interpretation: string;
   /** "llm" when a model parsed it, "rules" for the deterministic parser. */

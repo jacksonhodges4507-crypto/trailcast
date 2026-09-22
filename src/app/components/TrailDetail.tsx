@@ -2,7 +2,10 @@
 
 import type { TrailReport } from "@/lib/types";
 import { ACTIVITIES } from "@/lib/activities";
-import { formatDrive } from "@/lib/format";
+import { formatDrive, routeFigures } from "@/lib/format";
+import FishGuide from "./FishGuide";
+import UserReports from "./UserReports";
+import type { SpeciesId } from "@/lib/fishing/species";
 import {
   GRADE_CLASS,
   GRADE_COLOR,
@@ -15,6 +18,8 @@ import {
 export interface TrailDetailProps {
   report: TrailReport;
   onClose: () => void;
+  /** Open a species in the Fish Dex; supplied on fishing waters. */
+  onOpenSpecies?: (id: SpeciesId) => void;
 }
 
 /**
@@ -25,7 +30,7 @@ export interface TrailDetailProps {
  * statistic. They are now two separate labelled bars: how good the factor is
  * today, and how much it counts toward this activity's score.
  */
-export default function TrailDetail({ report, onClose }: TrailDetailProps) {
+export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDetailProps) {
   const { trail, verdict, conditions, travel } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
 
@@ -47,8 +52,7 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         <div>
           <h2>{trail.name}</h2>
           <div className="card-region">
-            {trail.region}, {trail.state} · {trail.distanceMi} mi ·{" "}
-            {trail.gainFt.toLocaleString()} ft gain
+            {[`${trail.region}, ${trail.state}`, ...routeFigures(trail, verdict.activity)].join(" · ")}
             {trail.rockType
               ? ` · ${trail.rockType}${trail.rockTypeSource === "inferred" ? "*" : ""}`
               : ""}
@@ -80,6 +84,16 @@ export default function TrailDetail({ report, onClose }: TrailDetailProps) {
         >
           {verdict.headline}
         </div>
+
+        {verdict.activity === "fish" ? (
+          <FishGuide
+            trailId={trail.id}
+            date={verdict.date}
+            onOpenSpecies={(id) => onOpenSpecies?.(id)}
+          />
+        ) : null}
+
+        <UserReports trailId={trail.id} activity={verdict.activity} />
 
         <div className="factors-key">
           Ordered by how much each matters for {activityLabel}

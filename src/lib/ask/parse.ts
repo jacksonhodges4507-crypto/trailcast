@@ -48,14 +48,63 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
   const withinHours = parseMiles(text, /within\s+(\d+(?:\.\d+)?)\s*(?:hr|hour)/);
   const withinMi = withinMiles ?? (withinHours !== undefined ? withinHours * 45 : undefined);
 
-  const maxDistanceMi = parseMiles(text, /(?:under|less than|shorter than|max)\s+(\d+(?:\.\d+)?)\s*(?:mi|mile)/);
-  const maxGainFt = parseMiles(text, /(?:under|less than|max)\s+(\d+(?:\.\d+)?)\s*(?:ft|feet|'|vert)/);
+  let maxDistanceMi = parseMiles(text, /(?:under|less than|shorter than|max)\s+(\d+(?:\.\d+)?)\s*(?:mi|mile)/);
+  let maxGainFt = parseMiles(text, /(?:under|less than|max)\s+(\d+(?:\.\d+)?)\s*(?:ft|feet|'|vert)/);
+
+  /*
+   * Intent words. Before these, the parser understood only activity, day,
+   * place and explicit distances, so "somewhere shady", "an easy one" and
+   * "something with a waterfall" all reduced to the same query and got the
+   * same answer. Each word below changes what is searched or how it is
+   * ranked, and every one is echoed back in the interpretation so the reader
+   * can see what was understood.
+   */
+  const easy = /\b(easy|short|quick|beginner|family|kids?|mellow|chill|casual)\b/.test(text);
+  const hard = /\b(hard|long|big day|challeng\w*|strenuous|workout|epic|tough)\b/.test(text);
+  const preferShade = /\b(shad(?:e|y|ed)|cool(?:er)?|out of the sun|beat the heat)\b/.test(text);
+  const preferSun = !preferShade && /\b(sunny|in the sun|warm(?:er)?|sun[- ]?facing)\b/.test(text);
+  const wantsWater = /\b(waterfalls?|falls|lakes?|swim\w*|alpine lake)\b/.test(text);
+
+  const rockMatch = text.match(/\b(sandstone|granite|limestone|quartzite|conglomerate|basalt)\b/);
+  const rockType = rockMatch?.[1] as AskQuery["rockType"];
+
+  const speciesMatch = text.match(
+    /\b(browns?|rainbows?|cutthroats?|cutty|cutties|brookies?|brooks?|whitefish|kokanee)\b/,
+  );
+  const SPECIES_WORD: Record<string, string> = {
+    brown: "brown", browns: "brown", rainbow: "rainbow", rainbows: "rainbow",
+    cutthroat: "bonneville-cutthroat", cutthroats: "bonneville-cutthroat",
+    cutty: "bonneville-cutthroat", cutties: "bonneville-cutthroat",
+    brook: "brook", brooks: "brook", brookie: "brook", brookies: "brook",
+    whitefish: "whitefish", kokanee: "kokanee",
+  };
+  const species = speciesMatch?.[1] ? SPECIES_WORD[speciesMatch[1]] : undefined;
+  if (species) activity = "fish";
+
+  let minGainFt: number | undefined;
+  if (easy && !hard && activity !== "climb" && activity !== "fish") {
+    maxDistanceMi = maxDistanceMi ?? 5;
+    maxGainFt = maxGainFt ?? 1200;
+  }
+  if (hard && !easy && activity !== "climb" && activity !== "fish") {
+    minGainFt = 2000;
+  }
 
   const parts = [`${ACTIVITIES[activity].label.toLowerCase()} on ${date}`];
   if (place) parts.push(`near ${place.label}`);
   if (withinMi !== undefined) parts.push(`within ${Math.round(withinMi)} mi`);
   if (maxDistanceMi !== undefined) parts.push(`under ${maxDistanceMi} mi long`);
-  if (maxGainFt !== undefined) parts.push(`under ${maxGainFt} ft of gain`);
+  if (maxGainFt !== undefined) parts.push(`under ${maxGainFt.toLocaleString()} ft of gain`);
+  if (minGainFt !== undefined) parts.push(`at least ${minGainFt.toLocaleString()} ft of gain`);
+  if (preferShade) parts.push("favouring shade");
+  if (preferSun) parts.push("favouring sun");
+  if (wantsWater) parts.push("with a lake or waterfall");
+  if (rockType) parts.push(`on ${rockType}`);
+  const SPECIES_LABEL: Record<string, string> = {
+    brown: "brown trout", rainbow: "rainbow trout", "bonneville-cutthroat": "cutthroat",
+    brook: "brook trout", whitefish: "whitefish", kokanee: "kokanee",
+  };
+  if (species) parts.push(`holding ${SPECIES_LABEL[species] ?? species}`);
 
   return {
     activity,
@@ -65,6 +114,12 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
     withinMi,
     maxDistanceMi,
     maxGainFt,
+    minGainFt,
+    preferShade: preferShade || undefined,
+    preferSun: preferSun || undefined,
+    wantsWater: wantsWater || undefined,
+    rockType,
+    species,
     interpretation: parts.join(", "),
     parsedBy: "rules",
   };
@@ -95,6 +150,9 @@ export function coerceQuery(raw: unknown, today: string, fallback: AskQuery): As
   void today;
 
   return {
+    // Intents the model schema does not cover are carried from the rules
+    // parse, so refining a query never silently discards "shady" or "easy".
+    ...fallback,
     activity,
     date,
     near: place?.label ?? near,

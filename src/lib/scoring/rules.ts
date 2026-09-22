@@ -287,6 +287,25 @@ export function estimateHours(trail: Trail, activity: ActivityId): number {
   return trail.distanceMi / pace + climbing;
 }
 
+/** "2026-09-19T19:17" -> "7:17 pm". Open-Meteo timestamps are already local. */
+export function clockTime(localIso: string | undefined): string | undefined {
+  const match = localIso?.match(/T(\d{2}):(\d{2})/);
+  if (!match) return undefined;
+  const h = Number(match[1]);
+  const suffix = h >= 12 ? "pm" : "am";
+  return `${h % 12 === 0 ? 12 : h % 12}:${match[2]} ${suffix}`;
+}
+
+/**
+ * Daylight, measured against the outing rather than on its own.
+ *
+ * This used to display the length of the day, which is the same number for
+ * every place in Utah on a given date -- so it repeated identically down the
+ * whole list and told the reader nothing. What differs between places is
+ * whether this particular outing fits: Timpanogos is a nine-and-a-half-hour
+ * day and Donut Falls is two. The reading is now the spare time, and the
+ * explanation leads with the sunset, which is the number people act on.
+ */
 export const daylightRule: Rule = ({ trail, conditions, activity }) => {
   const hours = conditions.daylightHours;
   if (hours === undefined) {
@@ -296,18 +315,27 @@ export const daylightRule: Rule = ({ trail, conditions, activity }) => {
   const needed = estimateHours(trail, activity);
   const ratio = hours / needed;
   const score = between(ratio, 0.95, 1.7, 0, 100);
+  const spare = hours - needed;
+
+  const sunset = clockTime(conditions.sunsetLocal);
+  const sunrise = clockTime(conditions.sunriseLocal);
+  const window = sunrise && sunset ? `Light ${sunrise}\u2013${sunset}` : `${hours.toFixed(1)} h of light`;
 
   let reason: string;
-  if (ratio < 1) reason = `${hours.toFixed(1)} h of daylight for a ~${needed.toFixed(1)} h outing — headlamp required`;
-  else if (ratio < 1.25) reason = `${hours.toFixed(1)} h of daylight against a ~${needed.toFixed(1)} h outing; little margin`;
-  else reason = `${hours.toFixed(1)} h of daylight, comfortable for a ~${needed.toFixed(1)} h outing`;
+  if (spare < 0) {
+    reason = `${window}; a ~${needed.toFixed(1)} h outing will not fit \u2014 start before dawn with a headlamp`;
+  } else if (ratio < 1.25) {
+    reason = `${window}; a ~${needed.toFixed(1)} h outing leaves only ${spare.toFixed(1)} h of margin \u2014 start early`;
+  } else {
+    reason = `${window}; a ~${needed.toFixed(1)} h outing leaves ${spare.toFixed(1)} h to spare`;
+  }
 
   return {
     id: "daylight",
     label: "Daylight",
     score,
     weight: 0,
-    display: `${hours.toFixed(1)} h`,
+    display: spare < 0 ? "headlamp needed" : `${spare.toFixed(1)} h spare`,
     reason,
     sources: collect(conditions, ["daylightHours", "sunriseLocal", "sunsetLocal"]),
   };

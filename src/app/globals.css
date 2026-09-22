@@ -47,8 +47,6 @@
   --banner-border: #f0cfc7;
 
   /* The basemap is drawn light; this leaves it alone in light mode. */
-  --map-filter: none;
-
   color-scheme: light;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
@@ -90,13 +88,6 @@
   --banner-bg: #3a2420;
   --banner-border: #5a332c;
 
-  /*
-   * The basemap tiles are drawn light and there is no keyless dark style, so
-   * the canvas is inverted and hue-rotated back. Pins are DOM elements, not
-   * canvas pixels, so they keep their true grade colours.
-   */
-  --map-filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75);
-
   color-scheme: dark;
 }
 
@@ -129,13 +120,6 @@
   --overlay-bg: rgba(30, 34, 28, 0.94);
   --banner-bg: #3a2420;
   --banner-border: #5a332c;
-
-  /*
-   * The basemap tiles are drawn light and there is no keyless dark style, so
-   * the canvas is inverted and hue-rotated back. Pins are DOM elements, not
-   * canvas pixels, so they keep their true grade colours.
-   */
-  --map-filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75);
 
   color-scheme: dark;
   }
@@ -389,6 +373,27 @@ button {
   cursor: default;
 }
 
+.sort-toggle {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.locate .sort-toggle button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.locate .sort-toggle button[aria-pressed="true"] {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .locate-error {
   flex-basis: 100%;
   font-size: 11px;
@@ -425,9 +430,23 @@ button {
 
 .ask-row {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
+.ask-row button {
+  align-self: flex-end;
+  min-height: 34px;
+}
+
+.ask textarea {
+  resize: none;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 68px;
+}
+
+.ask textarea,
 .ask input {
   flex: 1;
   min-width: 0;
@@ -440,11 +459,13 @@ button {
   outline: none;
 }
 
+.ask textarea:focus,
 .ask input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
+.ask textarea::placeholder,
 .ask input::placeholder {
   color: var(--text-faint);
 }
@@ -781,6 +802,252 @@ button {
   color: var(--accent);
 }
 
+/* ----------------------------------------------------------------- fishing -- */
+
+.fish-guide {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 13px 10px;
+  margin: 0 0 16px;
+}
+
+.fish-guide h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.fish-block {
+  margin-bottom: 12px;
+}
+
+.fish-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin-bottom: 5px;
+}
+
+.fish-eating,
+.dex-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.fish-species {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.species-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.species-chip em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.species-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fish-picks,
+.fish-regs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fish-picks li {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.fish-picks li:last-child {
+  border-bottom: 0;
+}
+
+.fish-size {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.fish-why {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.fish-regs li {
+  font-size: 12px;
+  line-height: 1.45;
+  padding-left: 12px;
+  position: relative;
+  margin-bottom: 3px;
+}
+
+.fish-regs li::before {
+  content: "\2022";
+  position: absolute;
+  left: 0;
+  color: var(--grade-marginal);
+}
+
+.fish-note {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.fish-source {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+
+.fish-source a {
+  color: var(--text-muted);
+}
+
+.dex-launch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.dex-launch button {
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dex-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dex-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 12.5px;
+}
+
+.dex-card:hover {
+  border-color: var(--accent);
+}
+
+.dex-card em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.dex-glyph {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.dex-badge {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.dex-badge.native {
+  color: var(--grade-prime);
+  border-color: var(--grade-prime);
+}
+
+.dex-hero {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+
+.dex-hero .dex-glyph {
+  font-size: 34px;
+}
+
+.dex-back {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.dex-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dex-facts div {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.dex-facts span {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
 /* ---------------------------------------------------------------- status -- */
 
 .statusbar {
@@ -925,7 +1192,13 @@ button {
   font-weight: 600;
 }
 
+/* The outer element belongs to MapLibre, which writes a transform onto it
+   every frame. It must carry no transition and no transform of its own. */
 .marker {
+  cursor: pointer;
+}
+
+.marker-dot {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -936,17 +1209,16 @@ button {
   font-size: 10.5px;
   font-weight: 700;
   color: #fff;
-  cursor: pointer;
   box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.35);
   font-variant-numeric: tabular-nums;
   transition: transform 0.12s ease;
 }
 
-.marker:hover {
+.marker:hover .marker-dot {
   transform: scale(1.15);
 }
 
-.marker-selected {
+.marker-selected .marker-dot {
   outline: 3px solid var(--text);
   outline-offset: 1px;
   transform: scale(1.15);
@@ -965,7 +1237,6 @@ button {
   gap: 12px;
   font-size: 10.5px;
   color: var(--text-muted);
-  backdrop-filter: blur(6px);
   flex-wrap: wrap;
   box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.12);
 }
@@ -978,10 +1249,6 @@ button {
 
 .maplibregl-ctrl-attrib {
   font-size: 10px;
-}
-
-.maplibregl-canvas {
-  filter: var(--map-filter);
 }
 
 .theme-toggle {
@@ -1085,6 +1352,7 @@ button {
     min-height: 44px;
   }
 
+  .ask textarea,
   .ask input {
     /* 16px keeps iOS from zooming the viewport on focus. */
     font-size: 16px;
@@ -1161,7 +1429,7 @@ button {
     max-width: calc(100% - 16px);
   }
 
-  .marker {
+  .marker-dot {
     width: 30px;
     height: 30px;
     font-size: 11px;
@@ -1180,4 +1448,134 @@ button {
   .legend span:nth-child(n + 4) {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   User reports: only kinds confirmed by 2+ distinct people are listed.
+--------------------------------------------------------------------------- */
+.reports {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.reports h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+.report-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.report-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+.report-list li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.report-good { border-left-color: var(--grade-prime) !important; }
+.report-warn { border-left-color: var(--grade-marginal) !important; }
+.report-bad { border-left-color: var(--grade-unsafe) !important; }
+.report-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.report-list q {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.report-empty,
+.report-note,
+.report-message {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.report-message {
+  color: var(--accent);
+  font-weight: 600;
+}
+.report-note {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.report-open,
+.report-actions button,
+.report-kinds button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+.report-open:hover,
+.report-actions button:hover,
+.report-kinds button:hover {
+  background: var(--surface-hover);
+}
+.report-form {
+  display: grid;
+  gap: 10px;
+}
+.report-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.report-kinds button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+.report-form textarea {
+  font: inherit;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  resize: vertical;
+}
+.report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.report-actions > span {
+  margin-right: auto;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.report-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.report-actions button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

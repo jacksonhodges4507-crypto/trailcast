@@ -33,7 +33,18 @@ const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplib
  * gating the markers on it. That is fixed below, and it is what actually
  * matters -- a basemap is a backdrop, and the pins should never wait for it.
  */
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const STYLE_URL = {
+  light: "https://tiles.openfreemap.org/styles/liberty",
+  dark: "https://tiles.openfreemap.org/styles/dark",
+} as const;
+
+type Theme = keyof typeof STYLE_URL;
+
+function currentTheme(): Theme {
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit === "dark" || explicit === "light") return explicit;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 /** How long the basemap gets before we say it is being slow. */
 const LOAD_DEADLINE_MS = 12000;
@@ -45,6 +56,7 @@ interface MapLibreMap {
   flyTo(options: unknown): void;
   resize(): void;
   remove(): void;
+  setStyle(style: string): void;
   loaded(): boolean;
   on(event: string, handler: (payload?: unknown) => void): void;
 }
@@ -159,7 +171,7 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
 
         const map = new maplibregl.Map({
           container: containerRef.current,
-          style: STYLE_URL,
+          style: STYLE_URL[currentTheme()],
           center: [-111.7, 40.5],
           zoom: 7.4,
           attributionControl: { compact: true },
@@ -214,6 +226,36 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
   }, [attempt]);
 
   /*
+   * Dark mode used to be a CSS filter (invert + hue-rotate) over the map
+   * canvas. A filter on a WebGL canvas makes the compositor repaint the whole
+   * thing on every frame of a pan, which is a large part of why dragging the
+   * map felt heavy. OpenFreeMap publishes a real dark style, so the map now
+   * swaps styles on a theme change and draws dark natively, at no per-frame
+   * cost. Markers are DOM elements, so a style swap leaves them untouched.
+   */
+  useEffect(() => {
+    if (!mapReady) return;
+    let applied = currentTheme();
+
+    const sync = () => {
+      const next = currentTheme();
+      if (next === applied) return;
+      applied = next;
+      mapRef.current?.setStyle(STYLE_URL[next]);
+    };
+
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    media?.addEventListener?.("change", sync);
+
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener?.("change", sync);
+    };
+  }, [mapReady]);
+
+  /*
    * Keep the canvas in step with its container. The panel opening and closing
    * changes the map's width without changing the window's, and MapLibre only
    * watches the window -- so without this the canvas keeps its old width and
@@ -239,11 +281,24 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
     markersRef.current.clear();
 
     for (const report of reports) {
+      /*
+       * Two elements, on purpose. MapLibre positions a marker by writing a
+       * CSS transform onto the element it is given, every frame the map
+       * moves. The hover effect used to put `transition: transform` and a
+       * `scale()` on that same element, so every pin spent each frame easing
+       * toward where it should already have been -- forty of them, on every
+       * frame of every pan. That was the lag. The outer element now belongs
+       * to MapLibre and carries no styling of its own; the visible dot, its
+       * hover scale and its transition all live on the inner child.
+       */
       const el = document.createElement("div");
       el.className = "marker";
-      el.style.background = GRADE_COLOR[report.verdict.grade];
-      el.textContent =
+      const dot = document.createElement("div");
+      dot.className = "marker-dot";
+      dot.style.background = GRADE_COLOR[report.verdict.grade];
+      dot.textContent =
         report.verdict.score !== undefined ? String(report.verdict.score) : "?";
+      el.appendChild(dot);
       el.title = `${report.trail.name} — ${report.verdict.headline}`;
       el.addEventListener("click", (event) => {
         event.stopPropagation();

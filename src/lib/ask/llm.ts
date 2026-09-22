@@ -165,6 +165,11 @@ export async function narrate(
         weightPct: Math.round(f.weight * 100),
         note: f.reason,
       })),
+    visitorReports: (report.crowd ?? []).map((c) => ({
+      report: c.label,
+      distinctPeople: c.reporters,
+      latest: c.latest,
+    })),
     missingInputs: report.verdict.factors
       .filter((f) => f.score === undefined)
       .map((f) => f.label),
@@ -192,6 +197,10 @@ export async function narrate(
     "  better conditions justify any extra drive over the runner-up, in minutes.",
     "  A few points is rarely worth an extra hour each way; a veto elsewhere",
     "  always is. Drive times are free-flow estimates: never promise them.",
+    "- visitorReports are unverified observations confirmed by 2+ different",
+    "  people in the last 48 hours. Mention a non-trivial one for the top",
+    "  option as reported, never as measured fact, and never let it override",
+    "  a sensor reading or a veto.",
   ].join("\n");
 
   const user = JSON.stringify(

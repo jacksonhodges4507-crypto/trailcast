@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MapView from "./MapView";
 import TrailDetail from "./TrailDetail";
+import FishDex from "./FishDex";
+import type { SpeciesId } from "@/lib/fishing/species";
 import AskBar from "./AskBar";
 import ThemeToggle from "./ThemeToggle";
-import { formatDrive } from "@/lib/format";
+import { formatDrive, routeFigures } from "@/lib/format";
 import { GRADE_CLASS, GRADE_TEXT } from "./grade";
 import { ACTIVITIES, ACTIVITY_IDS } from "@/lib/activities";
 import { forecastWindow, relativeLabel, weekdayName } from "@/lib/dates";
@@ -50,6 +52,20 @@ export default function Dashboard({ initial, today }: DashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // The Fish Dex shares the right-hand column with a water's detail.
+  const [dexOpen, setDexOpen] = useState(false);
+  const [dexFocus, setDexFocus] = useState<SpeciesId | null>(null);
+
+  const openSpecies = useCallback((id: SpeciesId | null) => {
+    setDexFocus(id);
+    setDexOpen(true);
+  }, []);
+
+  const selectFromDex = useCallback((trailId: string) => {
+    setDexOpen(false);
+    setSelectedId(trailId);
+  }, []);
+
   /*
    * The viewer's location, held in memory only.
    *
@@ -61,6 +77,16 @@ export default function Dashboard({ initial, today }: DashboardProps) {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
+
+  /*
+   * Sharing a location switches the list to nearest-first, because that is
+   * the question someone who just tapped "use my location" is asking. The
+   * toggle brings best-conditions order back; the map is unaffected.
+   */
+  const [sortBy, setSortBy] = useState<"best" | "closest">("best");
+  useEffect(() => {
+    setSortBy(coords ? "closest" : "best");
+  }, [coords]);
 
   const requestLocation = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -136,6 +162,17 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     if (top) setSelectedId(top.trail.id);
   }, []);
 
+  const listed = useMemo(() => {
+    if (sortBy !== "closest") return data.reports;
+    return data.reports
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.travel?.minutes ?? Number.POSITIVE_INFINITY) -
+          (b.travel?.minutes ?? Number.POSITIVE_INFINITY),
+      );
+  }, [data.reports, sortBy]);
+
   const selected = useMemo(
     () => data.reports.find((report) => report.trail.id === selectedId) ?? null,
     [data.reports, selectedId],
@@ -163,7 +200,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
       {error ? <div className="banner">{error}</div> : null}
 
-      <div className={`workspace${selected ? " has-detail" : ""}`}>
+      <div className={`workspace${selected || dexOpen ? " has-detail" : ""}`}>
         <div className="rail">
           <div className="controls">
             <div className="segmented" role="group" aria-label="Activity">
@@ -171,7 +208,10 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                 <button
                   key={id}
                   aria-pressed={activity === id}
-                  onClick={() => setActivity(id)}
+                  onClick={() => {
+                    setActivity(id);
+                    if (id !== "fish") setDexOpen(false);
+                  }}
                 >
                   <span aria-hidden>{ACTIVITIES[id].glyph}</span>
                   {ACTIVITIES[id].label}
@@ -191,6 +231,15 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             </div>
           </div>
 
+          {activity === "fish" ? (
+            <div className="dex-launch">
+              <button type="button" onClick={() => openSpecies(null)}>
+                <span aria-hidden>{"📖"}</span> Fish Dex
+              </button>
+              <span>Species, flies and regulations for every water</span>
+            </div>
+          ) : null}
+
           <div className="locate">
             {coords ? (
               <>
@@ -200,6 +249,22 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                 <button type="button" onClick={() => setCoords(null)}>
                   Clear
                 </button>
+                <div className="sort-toggle" role="group" aria-label="Sort">
+                  <button
+                    type="button"
+                    aria-pressed={sortBy === "closest"}
+                    onClick={() => setSortBy("closest")}
+                  >
+                    Closest
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={sortBy === "best"}
+                    onClick={() => setSortBy("best")}
+                  >
+                    Best conditions
+                  </button>
+                </div>
               </>
             ) : (
               <button type="button" onClick={requestLocation} disabled={locating}>
@@ -221,7 +286,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             </div>
           ) : (
             <div className="list">
-              {data.reports.map((report) => (
+              {listed.map((report) => (
                 <button
                   key={report.trail.id}
                   className="card"
@@ -254,12 +319,14 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                   <div className="card-stats">
                     {report.travel ? (
                       <span className="drive" title={report.travel.source === "estimate" ? "Estimated from straight-line distance" : "Free-flow drive time, no traffic"}>
-                        <span aria-hidden>🚗</span> {formatDrive(report.travel.minutes)}
+                        <span aria-hidden>🚗</span> {formatDrive(report.travel.minutes)}{" "}
+                        · {report.travel.miles} mi
                         {report.travel.source === "estimate" ? "*" : ""}
                       </span>
                     ) : null}
-                    <span>{report.trail.distanceMi} mi</span>
-                    <span>{report.trail.gainFt.toLocaleString()} ft</span>
+                    {routeFigures(report.trail, activity).map((figure) => (
+                      <span key={figure}>{figure}</span>
+                    ))}
                     {/*
                       Confidence used to show here as a percentage on every
                       card. It is a count of inputs received, not a
@@ -320,8 +387,19 @@ export default function Dashboard({ initial, today }: DashboardProps) {
           you had just clicked; as a column, the map keeps every pixel it is
           given and simply narrows, then widens again on close.
         */}
-        {selected ? (
-          <TrailDetail report={selected} onClose={() => setSelectedId(null)} />
+        {dexOpen ? (
+          <FishDex
+            focus={dexFocus}
+            onFocus={setDexFocus}
+            onSelectWater={selectFromDex}
+            onClose={() => setDexOpen(false)}
+          />
+        ) : selected ? (
+          <TrailDetail
+            report={selected}
+            onClose={() => setSelectedId(null)}
+            onOpenSpecies={openSpecies}
+          />
         ) : null}
       </div>
     </div>

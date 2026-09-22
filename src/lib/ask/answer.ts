@@ -2,7 +2,11 @@ import { TRAILS } from "../trails";
 import { buildReports } from "../report";
 import { haversineMi, type LatLon } from "../geo";
 import { drivePenalty } from "../travel";
+import { watersFor } from "../fishing/guide";
+import type { SpeciesId } from "../fishing/species";
 import { formatDrive } from "../format";
+import { readSummaries } from "../reports/service";
+import type { ReportSummary } from "../reports/kinds";
 
 export { formatDrive };
 import { gradeLabel, lowerFirst } from "../scoring";
@@ -42,8 +46,37 @@ function applyFilters(query: AskQuery): Trail[] {
       if (haversineMi(query.origin, trail) > radius) return false;
     }
 
+    if (query.minGainFt !== undefined && trail.gainFt < query.minGainFt) return false;
+    if (query.rockType && trail.rockType !== query.rockType) return false;
+    if (query.wantsWater && !/\b(lake|falls|waterfall|reservoir|river|creek)\b/i.test(`${trail.name} ${trail.blurb}`)) {
+      return false;
+    }
+    if (query.species && !watersFor(query.species as SpeciesId).includes(trail.id)) return false;
+
     return true;
   });
+}
+
+/**
+ * Preferences move a place up the ranking without excluding anything.
+ *
+ * "Somewhere shady" should favour shaded routes, not hide an exposed one that
+ * is dramatically better -- so a matching place gains a few points in the
+ * ordering, the same scale the drive-time cost uses, and the score shown on
+ * its card is untouched.
+ */
+export const PREFERENCE_POINTS = 6;
+
+export function preferenceBonus(query: AskQuery, trail: Trail): number {
+  let bonus = 0;
+  if (query.preferShade && !trail.exposed) bonus += PREFERENCE_POINTS;
+  if (query.preferShade && (trail.aspect === "N" || trail.aspect === "NE" || trail.aspect === "NW")) {
+    bonus += PREFERENCE_POINTS / 2;
+  }
+  if (query.preferSun && (trail.aspect === "S" || trail.aspect === "SE" || trail.aspect === "SW")) {
+    bonus += PREFERENCE_POINTS;
+  }
+  return bonus;
 }
 
 /**
@@ -59,11 +92,21 @@ function applyFilters(query: AskQuery): Trail[] {
 export function rankByProximity(
   reports: TrailReport[],
   origin?: { lat: number; lon: number },
+  query?: AskQuery,
 ): TrailReport[] {
-  if (!origin) return reports;
+  const bonus = (r: TrailReport) => (query ? preferenceBonus(query, r.trail) : 0);
+
+  if (!origin) {
+    if (!query) return reports;
+    return reports.slice().sort((a, b) => {
+      if (a.verdict.grade === "unsafe" && b.verdict.grade !== "unsafe") return 1;
+      if (b.verdict.grade === "unsafe" && a.verdict.grade !== "unsafe") return -1;
+      return (b.verdict.score ?? -1) + bonus(b) - ((a.verdict.score ?? -1) + bonus(a));
+    });
+  }
 
   const worth = (r: TrailReport) =>
-    (r.verdict.score ?? -1) - (r.travel ? drivePenalty(r.travel.minutes) : 0);
+    (r.verdict.score ?? -1) + bonus(r) - (r.travel ? drivePenalty(r.travel.minutes) : 0);
   const cost = (r: TrailReport) =>
     r.travel ? r.travel.minutes : haversineMi(origin, r.trail);
 
@@ -96,7 +139,7 @@ export function templateNarrative(
 
   const top = reports[0];
   if (!top) {
-    return `Nothing in the dataset matches ${query.interpretation}. Try widening the radius or dropping a filter.`;
+    return `Nothing in the dataset matches ${query.interpretation}. The narrowest part of that is usually the place, the rock type or the fish \u2014 try dropping one.`;
   }
 
   const scored = (report: TrailReport) =>
@@ -193,6 +236,15 @@ export function templateNarrative(
     }
   }
 
+  if (query.preferShade && !top.trail.exposed) {
+    sentences.push("It is also one of the shaded options, as asked.");
+  } else if (query.preferShade && top.trail.exposed) {
+    sentences.push("It is exposed rather than shaded, but the conditions gap outweighed that.");
+  }
+
+  const crowd = crowdSentence(top);
+  if (crowd) sentences.push(crowd);
+
   // Always name a downside. A recommendation with no caveat is the least
   // useful kind, even when the day genuinely is good.
   const weakest = scored(top).slice().sort((a, b) => a.score - b.score)[0];
@@ -208,6 +260,38 @@ export function templateNarrative(
   }
 
   return sentences.join(" ");
+}
+
+/**
+ * Add confirmed visitor reports to the shortlisted places. Only the top few
+ * are looked up, and a store outage simply leaves them off.
+ */
+export async function attachCrowdReports(reports: TrailReport[]): Promise<TrailReport[]> {
+  if (reports.length === 0) return reports;
+  let summaries: Map<string, ReportSummary>;
+  try {
+    summaries = await readSummaries(reports.map((r) => r.trail.id));
+  } catch {
+    return reports;
+  }
+  return reports.map((r) => {
+    const confirmed = summaries.get(r.trail.id)?.confirmed ?? [];
+    return confirmed.length > 0 ? { ...r, crowd: confirmed } : r;
+  });
+}
+
+/** One sentence on what visitors confirmed at the pick, if anything. */
+export function crowdSentence(report: TrailReport): string | null {
+  const crowd = report.crowd ?? [];
+  if (crowd.length === 0) return null;
+  const worrying = crowd.filter((c) => c.tone !== "good");
+  const shown = (worrying.length > 0 ? worrying : crowd).slice(0, 2);
+  const list = shown
+    .map((c) => `${c.label.toLowerCase()} (${c.reporters} people)`)
+    .join(" and ");
+  return worrying.length > 0
+    ? `Visitors in the last 48 h report ${list} there — not measured, but worth weighing.`
+    : `Visitors in the last 48 h back that up: ${list}.`;
 }
 
 export interface AskOptions {
@@ -249,7 +333,8 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
     signal: options.signal,
   });
 
-  const results = rankByProximity(built.reports, query.origin).slice(0, 5);
+  const ranked = rankByProximity(built.reports, query.origin, query).slice(0, 5);
+  const results = await attachCrowdReports(ranked);
 
   const llmNarrative = useLlm ? await narrate(query, results) : null;
 

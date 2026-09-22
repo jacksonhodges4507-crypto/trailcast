@@ -25,6 +25,8 @@ verdict and where that number came from.
 | **Scores** | seven weighted factors, re-weighted per activity (hiking, trail running, mountain biking, climbing) |
 | **Explains** | a plain-English reason per factor, a headline, and a source link with a fetch timestamp for every value |
 | **Answers** | natural-language questions — *"where should I ride Saturday near Park City?"* |
+| **Listens** | visitor reports, shown only once two different people agree |
+| **Guides** | what fish are eating this month, flies and lures per water, and a Fish Dex of Utah trout |
 
 ---
 
@@ -220,6 +222,62 @@ that; it needs to know what the rock is made of.
 Climbers also get their own temperature band. Friction falls off with heat, so
 66 °F is a perfect hiking day and an already-warm climbing one.
 
+### What they're eating, and the Fish Dex
+
+Each fishery carries a month-by-month guide: what trout are feeding on, the
+flies and lures that imitate it (with hook sizes and weights), and the Utah
+DWR special regulations for that water. It is assembled from three layers so
+it stays specific without being hand-written 96 times: a river calendar by
+month, a stillwater calendar by season (ice, ice-off, summer, fall), and local
+events that override both — cicadas on the Green in May and June, tricos in
+September, stoneflies on the Middle Provo. Tailwaters add scuds and sowbugs
+year-round because the cold, stable water below a dam grows them in every
+month. A water with no guide returns nothing rather than a plausible-looking
+guess. → [`fishing/guide.ts`](src/lib/fishing/guide.ts)
+
+The Fish Dex lists every species with how to identify it, typical size, spawn
+timing and habits, and links each one to the waters that hold it. Naming a
+fish in a question ("where are the browns eating?") switches to fishing and
+filters to waters that hold that species.
+→ [`fishing/species.ts`](src/lib/fishing/species.ts)
+
+---
+
+## Visitor reports, and why two people
+
+Sensors miss things a person sees in a second: a locked gate, downed trees,
+mud on the first mile, a hatch coming off. Anyone can report from a fixed menu
+(muddy, icy, fish biting, closed…) plus an optional 140-character note, but a
+report is only shown under **User reported** once **two different people**
+have made the same one inside 48 hours.
+
+- **Distinct people, not submissions.** One person pressing "closed" five
+  times is one voice and cannot confirm their own report.
+- **Nobody is stored.** Reporters are told apart by a salted SHA-256 of their
+  address, truncated to 16 hex characters — enough to count voices, not
+  enough to recover anyone. Notes are stripped of links and control
+  characters.
+- **Rate-limited** to eight reports per person per hour.
+- **Never scored.** Confirmed reports appear in the answer as reported, not
+  measured, and never move a score or override a veto. They expire after 48
+  hours, so an old "muddy" cannot haunt a dry week.
+
+Storage is Upstash Redis when connected, and process memory otherwise.
+→ [`reports/`](src/lib/reports)
+
+---
+
+## Different questions, different answers
+
+The deterministic parser used to understand only activity, day, place and
+explicit distances, so "somewhere shady", "an easy one" and "something with a
+waterfall" collapsed to the same query. It now reads intent words — easy
+(≤ 5 mi, ≤ 1,200 ft), hard (≥ 2,000 ft), shade, sun, lake or waterfall, rock
+type, fish species — and echoes each back in the interpretation. Filters
+narrow the search; preferences like shade only nudge the ranking by a few
+points, so a much better exposed trail still wins.
+→ [`ask/parse.ts`](src/lib/ask/parse.ts)
+
 ---
 
 ## Bounding the work
@@ -275,6 +333,9 @@ telling someone to wait. In production this moves to PostGIS.
 curl "$HOST/api/conditions?date=2026-09-19&activity=mtb"
 curl "$HOST/api/ask?q=where+should+I+hike+saturday+near+salt+lake"
 curl "$HOST/api/health"
+curl "$HOST/api/reports?trailId=logan-river"
+curl -X POST "$HOST/api/reports" -H 'content-type: application/json' \
+  -d '{"trailId":"logan-river","kind":"good-bite","note":"caddis at dusk"}'
 ```
 
 `/api/conditions` returns a scored report per trail with full factor
