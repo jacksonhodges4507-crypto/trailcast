@@ -109,18 +109,18 @@ export const temperatureRule: Rule = ({ trail, conditions, activity }) => {
    * explanation that disagree are worse than either alone.
    */
   let reason: string;
-  if (felt > hi + 24) reason = `Dangerous heat at ${range}${trail.exposed ? " with no shade" : ""}`;
-  else if (felt > hi + 12) reason = `Hot at ${range}${trail.exposed ? " on an exposed route" : ""} \u2014 start early`;
+  if (felt > hi + 24) reason = `It'll hit ${range}${trail.exposed ? " with no shade to hide in" : ""}, and that kind of heat is dangerous. I'd skip it or go at first light`;
+  else if (felt > hi + 12) reason = `It's going to be hot, ${range}${trail.exposed ? " and exposed" : ""}, so start early`;
   else if (felt > hi) {
     reason =
       activity === "climb"
-        ? `Warm for climbing at ${range} \u2014 friction will suffer, so aim for shade or the morning`
+        ? `Warm for climbing at ${range}; friction will suffer, so chase the shade or go in the morning`
         : activity === "trail_run"
-          ? `Warm for running at ${range}; carry more water than usual`
-          : `Warm at ${range}${trail.exposed ? " on an exposed route" : ""}`;
-  } else if (felt < lo - 20) reason = `Bitter at ${range}; full winter kit`;
-  else if (felt < lo) reason = `Cold at ${range}; layers needed`;
-  else reason = activity === "climb" ? `Good sending temperatures at ${range}` : `Comfortable at ${range}`;
+          ? `Warm for a run at ${range}, so carry more water than you think you need`
+          : `Pleasantly warm at ${range}${trail.exposed ? ", though there's not much shade" : ""}`;
+  } else if (felt < lo - 20) reason = `Bitterly cold at ${range}; bring full winter kit`;
+  else if (felt < lo) reason = `Chilly at ${range}, so bring layers`;
+  else reason = activity === "climb" ? `Good sending temps, ${range}` : `Comfortable, ${range}. About as nice as it gets`;
 
   return {
     id: "temperature",
@@ -161,11 +161,11 @@ export const precipitationRule: Rule = ({ trail, conditions, activity }) => {
   const veto = trail.exposed && inches >= 1.0;
 
   let reason: string;
-  if (veto) reason = `${inches.toFixed(2)} in of rain forecast on fully exposed terrain — flash flood and lightning risk`;
-  else if (inches >= 0.3) reason = `Wet: ${inches.toFixed(2)} in of rain expected, ${round(pct)}% chance`;
-  else if (pct >= 50) reason = `${round(pct)}% chance of showers, ${inches.toFixed(2)} in expected`;
-  else if (pct >= 20) reason = `Slight chance of showers (${round(pct)}%)`;
-  else reason = "Dry";
+  if (veto) reason = `${inches.toFixed(2)} in of rain on fully exposed terrain means flash flood and lightning risk. Not worth it`;
+  else if (inches >= 0.3) reason = `Expect to get wet: ${inches.toFixed(2)} in of rain, ${round(pct)}% chance`;
+  else if (pct >= 50) reason = `There's a ${round(pct)}% chance of showers (${inches.toFixed(2)} in), so pack a shell`;
+  else if (pct >= 20) reason = `Small chance of a shower (${round(pct)}%), nothing to worry about`;
+  else reason = "No rain in the forecast";
 
   return {
     id: "precipitation",
@@ -202,10 +202,10 @@ export const windRule: Rule = ({ trail, conditions }) => {
   const veto = trail.exposed && gust >= 45;
 
   let reason: string;
-  if (veto) reason = `Gusts to ${round(gust)} mph on exposed, fall-consequence terrain`;
-  else if (gust >= 30) reason = `Strong gusts to ${round(gust)} mph`;
-  else if (gust >= 18) reason = `Breezy, gusting ${round(gust)} mph`;
-  else reason = `Light wind${gustRaw !== undefined ? `, gusts ${round(gust)} mph` : ""}`;
+  if (veto) reason = `Gusts to ${round(gust)} mph on exposed terrain with a big fall. Too risky`;
+  else if (gust >= 30) reason = `It's going to be windy, gusts to ${round(gust)} mph`;
+  else if (gust >= 18) reason = `A bit breezy, gusting ${round(gust)} mph`;
+  else reason = `Barely any wind${gustRaw !== undefined ? `, gusts around ${round(gust)} mph` : ""}`;
 
   return {
     id: "wind",
@@ -243,11 +243,11 @@ export const airQualityRule: Rule = ({ conditions }) => {
   const veto = aqi >= 250;
 
   let reason: string;
-  if (aqi <= 50) reason = `Clean air (AQI ${round(aqi)})`;
-  else if (aqi <= 100) reason = `Moderate air quality (AQI ${round(aqi)})`;
-  else if (aqi <= 150) reason = `Unhealthy for sensitive groups (AQI ${round(aqi)})`;
-  else if (aqi <= 200) reason = `Unhealthy air (AQI ${round(aqi)}) — hard efforts inadvisable`;
-  else reason = `Very unhealthy air (AQI ${round(aqi)})`;
+  if (aqi <= 50) reason = `The air's clean (AQI ${round(aqi)})`;
+  else if (aqi <= 100) reason = `Air quality is okay (AQI ${round(aqi)})`;
+  else if (aqi <= 150) reason = `The air is unhealthy for sensitive groups (AQI ${round(aqi)}), so go easy if you have asthma`;
+  else if (aqi <= 200) reason = `The air's unhealthy (AQI ${round(aqi)}); I'd skip anything hard`;
+  else reason = `The air's very unhealthy (AQI ${round(aqi)}); stay in if you can`;
 
   return {
     id: "air_quality",
@@ -319,15 +319,15 @@ export const daylightRule: Rule = ({ trail, conditions, activity }) => {
 
   const sunset = clockTime(conditions.sunsetLocal);
   const sunrise = clockTime(conditions.sunriseLocal);
-  const window = sunrise && sunset ? `Light ${sunrise}\u2013${sunset}` : `${hours.toFixed(1)} h of light`;
+  const window = sunrise && sunset ? `You've got light from ${sunrise} to ${sunset}` : `You've got ${hours.toFixed(1)} h of light`;
 
   let reason: string;
   if (spare < 0) {
-    reason = `${window}; a ~${needed.toFixed(1)} h outing will not fit \u2014 start before dawn with a headlamp`;
+    reason = `${window}, and a ~${needed.toFixed(1)} h outing won't fit, so start before dawn with a headlamp`;
   } else if (ratio < 1.25) {
-    reason = `${window}; a ~${needed.toFixed(1)} h outing leaves only ${spare.toFixed(1)} h of margin \u2014 start early`;
+    reason = `${window}, so a ~${needed.toFixed(1)} h outing only leaves ${spare.toFixed(1)} h of margin. Start early`;
   } else {
-    reason = `${window}; a ~${needed.toFixed(1)} h outing leaves ${spare.toFixed(1)} h to spare`;
+    reason = `${window}, so a ~${needed.toFixed(1)} h outing leaves ${spare.toFixed(1)} h to spare`;
   }
 
   return {
@@ -409,11 +409,11 @@ export const surfaceRule: Rule = ({ trail, conditions, activity }) => {
   if (activity === "mtb" && wetness > 0.25) score = clamp(score - 15);
 
   let reason: string;
-  if (snowIn > 6) reason = `${snowIn.toFixed(0)} in of snow on the ground; expect postholing`;
-  else if (snowIn > 1) reason = `${snowIn.toFixed(1)} in of lingering snow on a ${trail.aspect}-facing route`;
-  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days on ${trail.surface} — likely muddy`;
-  else if (wetness > 0.2) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days; tacky in places`;
-  else reason = `Dry and firm ${trail.surface}`;
+  if (snowIn > 6) reason = `${snowIn.toFixed(0)} in of snow on the ground, so expect to posthole`;
+  else if (snowIn > 1) reason = `${snowIn.toFixed(1)} in of snow still hanging on this ${trail.aspect}-facing route`;
+  else if (wetness > 0.5) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days on ${trail.surface}, so it's probably muddy`;
+  else if (wetness > 0.2) reason = `${(prior ?? 0).toFixed(2)} in of rain over the last 3 days; it'll be tacky in places`;
+  else reason = `The ${trail.surface} should be dry and firm`;
 
   // The riding penalty above fires at wetness > 0.25, so the explanation has
   // to fire at the same threshold. A score that moves without a reason that
@@ -496,7 +496,7 @@ export const rockRule: Rule = ({ trail, conditions }) => {
       score: 0,
       weight: 0,
       display: `${todayRain.toFixed(2)} in today`,
-      reason: `Rain forecast today — ${spec.label} will be wet${rock === "sandstone" ? "; climbing saturated sandstone breaks holds" : ""}`,
+      reason: `Rain's forecast today, so the ${spec.label} will be wet${rock === "sandstone" ? ", and climbing saturated sandstone breaks holds" : ""}`,
       veto: rock === "sandstone",
       sources: collect(conditions, ["precipitationIn", "hoursSincePrecip"]),
     };
@@ -510,7 +510,7 @@ export const rockRule: Rule = ({ trail, conditions }) => {
       score: 100,
       weight: 0,
       display: "4+ days dry",
-      reason: `Dry ${spec.label}; no rain in at least four days`,
+      reason: `The ${spec.label} should be bone dry; no rain in at least four days`,
       sources: collect(conditions, ["precipitationPrior72hIn", "hoursSincePrecip"]),
     };
   }
@@ -522,11 +522,11 @@ export const rockRule: Rule = ({ trail, conditions }) => {
   if (veto && rock === "sandstone") {
     reason = `Only ${Math.round(since)} h since rain. Wet sandstone loses up to 75% of its strength — climbing it now snaps holds and destroys routes. Wait ${Math.round(vetoHours - since)} h more.`;
   } else if (veto) {
-    reason = `Only ${Math.round(since)} h since rain; ${spec.label} will still be damp or seeping`;
+    reason = `Only ${Math.round(since)} h since rain, so the ${spec.label} will still be damp or seeping`;
   } else if (score < 70) {
-    reason = `${Math.round(since)} h since rain — ${spec.label} is drying but may still be greasy in shaded corners`;
+    reason = `${Math.round(since)} h since rain; the ${spec.label} is drying but could be greasy in shady corners`;
   } else {
-    reason = `${Math.round(since)} h since rain; ${spec.label} should be dry`;
+    reason = `${Math.round(since)} h since rain, so the ${spec.label} should be dry`;
   }
 
   // Say so when the rock type is a regional inference rather than a verified
@@ -586,11 +586,11 @@ export const waterTempRule: Rule = ({ conditions }) => {
   if (veto) {
     reason = `${round(temp)} \u00b0F is too warm to fish ethically \u2014 trout played in water this warm often die after release. Fish at dawn or find higher, colder water.`;
   } else if (temp >= 65) {
-    reason = `${round(temp)} \u00b0F and climbing; fish early and release quickly`;
+    reason = `The water's ${round(temp)} \u00b0F and climbing, so fish early and release them quickly`;
   } else if (temp < 42) {
-    reason = `${round(temp)} \u00b0F \u2014 cold and slow; fish deep and expect a short window`;
+    reason = `The water's ${round(temp)} \u00b0F, cold and slow; fish deep and expect a short window`;
   } else {
-    reason = `${round(temp)} \u00b0F, in the band trout feed hardest in`;
+    reason = `The water's ${round(temp)} \u00b0F, right where trout feed hardest`;
   }
 
   return {
@@ -651,7 +651,7 @@ export const waterFlowRule: Rule = ({ conditions }) => {
     score: clamp(score),
     weight: 0,
     display: flow !== undefined ? `${flow.toFixed(0)} cfs` : `${(recentRain ?? 0).toFixed(2)} in rain`,
-    reason: notes.length > 0 ? notes.join("; ") : "Stable water",
+    reason: notes.length > 0 ? notes.join("; ") : "The water looks stable",
     sources: collect(conditions, ["streamflowCfs", "precipitationPrior72hIn"]),
   };
 };
@@ -673,10 +673,10 @@ export const pressureRule: Rule = ({ conditions }) => {
   else score = clamp(72 - change * 7);
 
   let reason: string;
-  if (change <= -3) reason = `Falling hard (${change.toFixed(1)} hPa in 24 h) \u2014 prime feeding window`;
-  else if (change < -0.5) reason = `Easing off (${change.toFixed(1)} hPa) \u2014 a good sign`;
-  else if (change > 4) reason = `Rising sharply (+${change.toFixed(1)} hPa) behind a front; expect a slow bite`;
-  else reason = `Steady (${change >= 0 ? "+" : ""}${change.toFixed(1)} hPa)`;
+  if (change <= -3) reason = `The barometer's dropping fast (${change.toFixed(1)} hPa in 24 h), which is prime feeding time`;
+  else if (change < -0.5) reason = `Pressure's easing off (${change.toFixed(1)} hPa), which is a good sign`;
+  else if (change > 4) reason = `Pressure's rising sharply (+${change.toFixed(1)} hPa) behind a front, so expect a slow bite`;
+  else reason = `Pressure's holding steady (${change >= 0 ? "+" : ""}${change.toFixed(1)} hPa)`;
 
   return {
     id: "pressure",
@@ -719,7 +719,7 @@ export const wildfireRule: Rule = ({ conditions }) => {
       score: 100,
       weight: 0,
       display: "none within 100 mi",
-      reason: "No active fire perimeters within 100 miles",
+      reason: "No active fires within 100 miles",
       sources: collect(conditions, ["wildfires"]),
     };
   }

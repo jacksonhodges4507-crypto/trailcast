@@ -62,7 +62,10 @@ interface MapLibreMap {
   on(event: string, layer: string, handler: (payload?: unknown) => void): void;
   addSource(id: string, source: Record<string, unknown>): void;
   getSource(id: string): { setData(data: unknown): void } | undefined;
-  addLayer(layer: Record<string, unknown>): void;
+  addLayer(layer: Record<string, unknown>, beforeId?: string): void;
+  removeLayer(id: string): void;
+  removeSource(id: string): void;
+  setLayoutProperty(layer: string, name: string, value: unknown): void;
   getLayer(id: string): unknown;
   getCanvas(): HTMLCanvasElement;
 }
@@ -145,8 +148,62 @@ function cssColor(value: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(match[1]!).trim() || "#5e8c3a";
 }
 
+export type MapMode = "trails" | "satellite" | "weather";
+
+const MODES: { id: MapMode; label: string }[] = [
+  { id: "trails", label: "Trails" },
+  { id: "satellite", label: "Satellite" },
+  { id: "weather", label: "Weather" },
+];
+
+/*
+ * Satellite imagery is Esri's World Imagery tile service, credited on the
+ * map. Live radar is RainViewer's public tile cache: the latest composite
+ * frame, refreshed while the Weather mode is open.
+ */
+const SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const RADAR_INDEX = "https://api.rainviewer.com/public/weather-maps.json";
+
+/** Colour for a forecast high, cold blue through Ember to hot red. */
+function tempColor(f: number): string {
+  if (f < 32) return "#4a78b0";
+  if (f < 50) return "#5f93a8";
+  if (f < 65) return "#6b7f4e";
+  if (f < 80) return "#b8892b";
+  if (f < 92) return "#c8561e";
+  return "#a3321f";
+}
+
 export default function MapView({ reports, selectedId, onSelect, activity }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [mode, setMode] = useState<MapMode>("trails");
+  const modeRef = useRef<MapMode>("trails");
+  modeRef.current = mode;
+  const [radar, setRadar] = useState<{ url: string; time: number } | null>(null);
+
+  // Latest radar frame while Weather is showing, refreshed every 5 minutes.
+  useEffect(() => {
+    if (mode !== "weather") return;
+    let cancelled = false;
+    const load = () =>
+      fetch(RADAR_INDEX)
+        .then((r) => r.json() as Promise<{ host: string; radar: { past: { time: number; path: string }[] } }>)
+        .then((index) => {
+          const latest = index.radar.past[index.radar.past.length - 1];
+          if (!cancelled && latest) {
+            setRadar({ url: `${index.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, time: latest.time });
+          }
+        })
+        .catch(() => {
+          // No radar right now: the pins still show temperatures.
+        });
+    void load();
+    const timer = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [mode]);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, { marker: MapLibreMarker; el: HTMLElement }>>(new Map());
 
@@ -363,6 +420,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
   }, [reports]);
 
   const wallHandlersRef = useRef(false);
+  const sourceUrls = useRef<Record<string, string>>({});
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
   const drawRef = useRef<() => void>(() => {});
@@ -399,6 +457,34 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
     }
 
     const lines = { type: "FeatureCollection", features: lineFeatures };
+
+    // Imagery and radar sit under the trail lines and pins.
+    const ensureRaster = (id: string, tiles: string | null, visible: boolean, extra: Record<string, unknown>) => {
+      try {
+        if (!tiles) {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+          return;
+        }
+        if (map.getSource(id) && sourceUrls.current[id] !== tiles) {
+          if (map.getLayer(id)) map.removeLayer(id);
+          map.removeSource(id);
+        }
+        if (!map.getSource(id)) {
+          map.addSource(id, { type: "raster", tiles: [tiles], tileSize: 256, ...extra });
+          sourceUrls.current[id] = tiles;
+        }
+        if (!map.getLayer(id)) {
+          map.addLayer(
+            { id, type: "raster", source: id, paint: { "raster-opacity": id === "tc-radar" ? 0.7 : 1 } },
+            map.getLayer("tc-lines-casing") ? "tc-lines-casing" : undefined,
+          );
+        }
+        map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      } catch {
+        // Style mid-load; redrawn on styledata.
+      }
+    };
+
     const walls = { type: "FeatureCollection", features: wallFeatures };
 
     try {
@@ -490,18 +576,45 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
     } catch {
       // The style is mid-load; the styledata listener below redraws once it lands.
     }
+
+    ensureRaster("tc-sat", SATELLITE_TILES, mode === "satellite", {
+      attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+      maxzoom: 18,
+    });
+    ensureRaster("tc-radar", radar?.url ?? null, mode === "weather", {
+      attribution: "Radar © RainViewer",
+      maxzoom: 7,
+    });
+
+    // Pins: scores normally, today's high in Weather mode.
+    for (const report of reports) {
+      const entry = markersRef.current.get(report.trail.id);
+      const dot = entry?.el.firstElementChild as HTMLElement | null | undefined;
+      if (!dot) continue;
+      const high = report.conditions.tempMaxF;
+      if (mode === "weather" && high !== undefined) {
+        dot.textContent = `${Math.round(high)}°`;
+        dot.style.background = tempColor(high);
+      } else {
+        dot.textContent = report.verdict.score !== undefined ? String(report.verdict.score) : "?";
+        dot.style.background = GRADE_COLOR[report.verdict.grade];
+      }
+    }
   };
 
   useEffect(() => {
     drawRef.current();
-  }, [overlays, reports, selectedId, activity, mapReady]);
+  }, [overlays, reports, selectedId, activity, mapReady, mode, radar]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     // Fires after every style (re)load, including the dark-mode swap.
     map.on("styledata", () => {
-      if (!map.getLayer("tc-lines") || !map.getLayer("tc-walls")) drawRef.current();
+      if (!map.getLayer("tc-lines") || !map.getLayer("tc-walls")) {
+        sourceUrls.current = {};
+        drawRef.current();
+      }
     });
   }, [mapReady]);
 
@@ -545,6 +658,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
       markersRef.current.set(report.trail.id, { marker, el });
     }
 
+    drawRef.current();
     refitRef.current = () => fit(0);
     fit(600);
 
@@ -610,6 +724,20 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
 
   return (
     <div className="map" ref={containerRef}>
+      <div className="map-modes" role="group" aria-label="Map style">
+        {MODES.map((m) => (
+          <button key={m.id} type="button" aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+      {mode === "weather" ? (
+        <div className="map-weather-note">
+          {radar
+            ? `Live radar · ${new Date(radar.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · pins show the day's high`
+            : "Loading radar… pins show the day's high"}
+        </div>
+      ) : null}
       {!tilesReady ? (
         <div className={slow ? "map-note map-note-slow" : "map-note"}>
           {slow ? (

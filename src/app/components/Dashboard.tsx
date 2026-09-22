@@ -321,7 +321,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             <h1>
               <Wordmark />
             </h1>
-            <span className="tagline">The forecast for where you&apos;re going, not where you are.</span>
+            <span className="tagline">Know where to go, and when to go.</span>
           </div>
         </div>
         <div className="masthead-right">

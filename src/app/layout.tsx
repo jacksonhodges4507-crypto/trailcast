@@ -15,7 +15,7 @@ const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "TrailCast — the forecast for where you're going",
+  title: "TrailCast — know where to go, and when to go",
   description:
     "Ingests live weather, air quality, wildfire and stream-gauge data, scores it against each place's own terrain, and explains the verdict with citations.",
 };

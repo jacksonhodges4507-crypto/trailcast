@@ -349,6 +349,8 @@ cells at a time, and returns `scored` and `available` so the UI can say
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
 | [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported); walls and routes (live, cached daily) | no |
 | [OpenStreetMap / Overpass](https://overpass-api.de/) | trail lines, river stretches and lake shorelines drawn on the map | no |
+| [RainViewer](https://www.rainviewer.com/api.html) | live radar layer in the map's Weather mode | no |
+| [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) | the map's Satellite mode | no |
 | [Wikimedia Commons](https://commons.wikimedia.org/) | Fish Dex photographs (public domain or CC BY-SA, credited) | no |
 
 Climbing areas are imported from [OpenBeta](https://openbeta.io), an open
