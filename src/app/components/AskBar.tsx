@@ -3,12 +3,34 @@
 import { useEffect, useRef, useState } from "react";
 import type { AskAnswer } from "@/lib/types";
 
-const SUGGESTIONS = [
-  "where should I hike saturday near salt lake?",
-  "somewhere to ride tomorrow under 10 miles",
-  "shady trail run in provo this weekend",
-  "climbing conditions friday",
-];
+/*
+ * Search history replaces the canned suggestions. It lives only in this
+ * browser (localStorage), never on the server, and every read and write is
+ * guarded because storage can be unavailable in private windows.
+ */
+const HISTORY_KEY = "trailcast.askHistory.v1";
+const HISTORY_MAX = 8;
+
+/** Shown until someone has asked anything, so the space is never blank. */
+const STARTERS = ["where should I hike saturday near salt lake?", "climbing conditions friday"];
+
+function readHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").slice(0, HISTORY_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(items: string[]): void {
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+  } catch {
+    // Storage blocked: history just won't persist.
+  }
+}
 
 export interface AskBarProps {
   onAnswer: (answer: AskAnswer) => void;
@@ -29,6 +51,27 @@ export default function AskBar({ onAnswer, coords }: AskBarProps) {
     box.style.height = "auto";
     box.style.height = `${Math.min(box.scrollHeight, 150)}px`;
   }, [question]);
+  const [history, setHistory] = useState<string[]>([]);
+  useEffect(() => {
+    setHistory(readHistory());
+  }, []);
+
+  function remember(text: string) {
+    setHistory((current) => {
+      const next = [text, ...current.filter((q) => q.toLowerCase() !== text.toLowerCase())].slice(0, HISTORY_MAX);
+      writeHistory(next);
+      return next;
+    });
+  }
+
+  function forget(text: string) {
+    setHistory((current) => {
+      const next = current.filter((q) => q !== text);
+      writeHistory(next);
+      return next;
+    });
+  }
+
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +98,7 @@ export default function AskBar({ onAnswer, coords }: AskBarProps) {
       }
 
       const data = (await response.json()) as AskAnswer;
+      remember(trimmed);
       setAnswer(data);
       onAnswer(data);
     } catch (caught) {
@@ -94,19 +138,48 @@ export default function AskBar({ onAnswer, coords }: AskBarProps) {
         </button>
       </form>
 
-      <div className="ask-suggestions">
-        {SUGGESTIONS.map((suggestion) => (
+      <div className="ask-history">
+        <div className="ask-history-label">{history.length > 0 ? "Recent searches" : "Try"}</div>
+        <ul>
+          {(history.length > 0 ? history : STARTERS).map((item) => (
+            <li key={item}>
+              <button
+                type="button"
+                className="ask-history-item"
+                title="Search this again"
+                onClick={() => {
+                  setQuestion(item);
+                  void submit(item);
+                }}
+              >
+                <span aria-hidden>{history.length > 0 ? "↻" : "›"}</span>
+                {item}
+              </button>
+              {history.length > 0 ? (
+                <button
+                  type="button"
+                  className="ask-history-remove"
+                  aria-label={`Remove "${item}" from history`}
+                  onClick={() => forget(item)}
+                >
+                  ×
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {history.length > 1 ? (
           <button
-            key={suggestion}
             type="button"
+            className="ask-history-clear"
             onClick={() => {
-              setQuestion(suggestion);
-              void submit(suggestion);
+              setHistory([]);
+              writeHistory([]);
             }}
           >
-            {suggestion}
+            Clear history
           </button>
-        ))}
+        ) : null}
       </div>
 
       {error ? (

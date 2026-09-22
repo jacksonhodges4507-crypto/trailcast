@@ -45,10 +45,18 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
               ← All species
             </button>
 
+            <figure className="dex-photo">
+              <img src={species.photo.src} alt={`${species.name}, photographed`} loading="lazy" />
+              <figcaption>
+                Photo: {species.photo.credit} ·{" "}
+                <a href={species.photo.page} target="_blank" rel="noreferrer noopener">
+                  {species.photo.license}
+                </a>
+                {species.photo.caveat ? <span>{species.photo.caveat}</span> : null}
+              </figcaption>
+            </figure>
+
             <div className="dex-hero">
-              <span className="dex-glyph" aria-hidden>
-                {species.glyph}
-              </span>
               <span className={species.native ? "dex-badge native" : "dex-badge"}>
                 {species.native ? "Native to Utah" : "Introduced"}
               </span>
@@ -104,9 +112,7 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
               const s = SPECIES[id];
               return (
                 <button key={id} type="button" className="dex-card" onClick={() => onFocus(id)}>
-                  <span className="dex-glyph" aria-hidden>
-                    {s.glyph}
-                  </span>
+                  <img className="dex-thumb" src={s.photo.src} alt="" loading="lazy" />
                   <strong>{s.name}</strong>
                   <span className={s.native ? "dex-badge native" : "dex-badge"}>
                     {s.native ? "Native" : "Introduced"}

@@ -41,7 +41,7 @@ export default function FishGuide({ trailId, date, onOpenSpecies }: FishGuidePro
               onClick={() => onOpenSpecies(s.id)}
               title={`Open ${s.name} in the Fish Dex`}
             >
-              <span aria-hidden>{s.glyph}</span> {s.name}
+              <img className="species-thumb" src={s.photo.src} alt="" loading="lazy" /> {s.name}
               <em>{ABUNDANCE_LABEL[s.abundance]}</em>
             </button>
           ))}

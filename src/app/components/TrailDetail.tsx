@@ -5,6 +5,8 @@ import { ACTIVITIES } from "@/lib/activities";
 import { formatDrive, routeFigures } from "@/lib/format";
 import FishGuide from "./FishGuide";
 import UserReports from "./UserReports";
+import Directions from "./Directions";
+import ClimbRoutes from "./ClimbRoutes";
 import type { SpeciesId } from "@/lib/fishing/species";
 import {
   GRADE_CLASS,
@@ -67,6 +69,8 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
       <div className="detail-body">
         <p className="detail-blurb">{trail.blurb}</p>
 
+        <Directions name={trail.name} lat={trail.lat} lon={trail.lon} />
+
         {travel ? (
           <div className="detail-drive">
             <strong>{formatDrive(travel.minutes)}</strong> drive each way · {travel.miles} mi
@@ -85,6 +89,8 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
           {verdict.headline}
         </div>
 
+        {verdict.activity === "climb" ? <ClimbRoutes trailId={trail.id} /> : null}
+
         {verdict.activity === "fish" ? (
           <FishGuide
             trailId={trail.id}
@@ -92,8 +98,6 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
             onOpenSpecies={(id) => onOpenSpecies?.(id)}
           />
         ) : null}
-
-        <UserReports trailId={trail.id} activity={verdict.activity} />
 
         <div className="factors-key">
           Ordered by how much each matters for {activityLabel}
@@ -145,6 +149,8 @@ export default function TrailDetail({ report, onClose, onOpenSpecies }: TrailDet
             </div>
           );
         })}
+
+        <UserReports trailId={trail.id} activity={verdict.activity} />
 
         {conditions.wildfires && conditions.wildfires.length > 0 ? (
           <div className="sources">

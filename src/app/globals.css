@@ -209,7 +209,8 @@ button {
 }
 
 .workspace.has-detail {
-  grid-template-columns: minmax(280px, 340px) 1fr minmax(320px, 380px);
+  /* The panel is where the reading happens, so it takes real width when open. */
+  grid-template-columns: minmax(270px, 320px) 1fr minmax(380px, 470px);
 }
 
 .rail {
@@ -486,26 +487,89 @@ button {
   cursor: default;
 }
 
-.ask-suggestions {
+.ask-history {
+  margin-top: 10px;
+}
+
+.ask-history-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.ask-history ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ask-history li {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 9px;
+  align-items: center;
+  gap: 2px;
 }
 
-.ask-suggestions button {
-  border: 1px solid var(--border);
-  background: var(--surface);
+.ask-history-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11.5px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.ask-suggestions button:hover {
+.ask-history-item span {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.ask-history-item:hover {
+  background: var(--surface-hover);
   color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-dim);
+}
+
+.ask-history-remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.ask-history-remove:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+.ask-history-clear {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .answer {
@@ -1363,11 +1427,6 @@ button {
     min-height: 44px;
   }
 
-  .ask-suggestions button {
-    font-size: 12px;
-    padding: 6px 11px;
-  }
-
   .list {
     padding: 10px 12px 32px;
   }
@@ -1578,4 +1637,267 @@ button {
 .report-actions button.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------- detail v2 -- */
+
+.detail-body {
+  font-size: 14px;
+}
+
+.detail .factor-reason,
+.detail .factor-missing {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.directions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.directions-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+
+.directions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.directions a:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* Real routes for a climbing area. */
+.climbs {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 13px;
+  margin: 0 0 16px;
+}
+
+.climbs h3 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.climbs-loading {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.climbs-sub {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.climbs-walls,
+.climbs-filters {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  scrollbar-width: thin;
+}
+
+.climbs-walls button,
+.climbs-filters button {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.climbs-walls button span {
+  color: var(--text-faint);
+  margin-left: 3px;
+}
+
+.climbs-walls button[aria-pressed="true"],
+.climbs-filters button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.climbs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.climbs-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.climb-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.climb-grade {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.climb-meta {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.climbs-more {
+  width: 100%;
+  margin-top: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.climbs-source {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* Fish Dex photographs. */
+.dex-photo {
+  margin: 0 0 12px;
+}
+
+.dex-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+}
+
+.dex-photo figcaption {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.dex-photo figcaption a {
+  color: inherit;
+}
+
+.dex-photo figcaption span {
+  display: block;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.dex-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  margin-bottom: 4px;
+}
+
+.species-thumb {
+  width: 34px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: 4px;
+  background: var(--surface-hover);
+}
+
+@media (max-width: 900px) {
+  .detail {
+    max-height: 86vh;
+  }
+
+  .detail-body {
+    font-size: 15px;
+  }
+
+  .directions a {
+    flex: 1;
+    justify-content: center;
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+
+  .directions-label {
+    flex-basis: 100%;
+  }
+
+  .ask-history-item {
+    font-size: 14px;
+    padding: 10px 8px;
+  }
+
+  .ask-history-remove {
+    padding: 10px 12px;
+    font-size: 18px;
+  }
+
+  .climbs-walls button,
+  .climbs-filters button,
+  .report-kinds button,
+  .report-open,
+  .report-actions button {
+    padding: 9px 13px;
+    font-size: 13.5px;
+  }
+
+  .climb-name {
+    font-size: 14.5px;
+  }
+
+  .climbs-list li {
+    padding: 10px 0;
+  }
+
+  .dex-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

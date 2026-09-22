@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TrailReport } from "@/lib/types";
+import type { ActivityId, TrailReport } from "@/lib/types";
 import { GRADE_COLOR } from "./grade";
 
 /**
@@ -59,6 +59,12 @@ interface MapLibreMap {
   setStyle(style: string): void;
   loaded(): boolean;
   on(event: string, handler: (payload?: unknown) => void): void;
+  on(event: string, layer: string, handler: (payload?: unknown) => void): void;
+  addSource(id: string, source: Record<string, unknown>): void;
+  getSource(id: string): { setData(data: unknown): void } | undefined;
+  addLayer(layer: Record<string, unknown>): void;
+  getLayer(id: string): unknown;
+  getCanvas(): HTMLCanvasElement;
 }
 
 interface MapLibreMarker {
@@ -119,9 +125,27 @@ export interface MapViewProps {
   reports: TrailReport[];
   selectedId: string | null;
   onSelect: (trailId: string) => void;
+  /** Which activity is on screen; decides what the map draws. */
+  activity?: ActivityId;
 }
 
-export default function MapView({ reports, selectedId, onSelect }: MapViewProps) {
+/** Trail and river lines, keyed by place id: each an array of [lon, lat] runs. */
+type LineIndex = Record<string, [number, number][][]>;
+/** Climbing walls, keyed by area id: [lon, lat, name, route count]. */
+type WallIndex = Record<string, [number, number, string, number][]>;
+
+/** Shared across mounts: a place's shape does not change during a visit. */
+const geoCache = new Map<string, { lines: [number, number][][]; walls: [number, number, string, number][] }>();
+const geoRequested = new Set<string>();
+
+/** Resolve a `var(--token)` colour, since WebGL paint cannot read CSS. */
+function cssColor(value: string): string {
+  const match = value.match(/var\((--[\w-]+)\)/);
+  if (!match || typeof document === "undefined") return value;
+  return getComputedStyle(document.documentElement).getPropertyValue(match[1]!).trim() || "#5e8c3a";
+}
+
+export default function MapView({ reports, selectedId, onSelect, activity }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, { marker: MapLibreMarker; el: HTMLElement }>>(new Map());
@@ -222,6 +246,7 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
       markersRef.current.clear();
       mapRef.current?.remove();
       mapRef.current = null;
+      wallHandlersRef.current = false;
     };
   }, [attempt]);
 
@@ -270,6 +295,206 @@ export default function MapView({ reports, selectedId, onSelect }: MapViewProps)
     });
     observer.observe(container);
     return () => observer.disconnect();
+  }, [mapReady]);
+
+  /*
+   * What the place actually is, drawn on the map: the trail itself for
+   * hiking, running and riding, the fishable stretch of river for fishing,
+   * and every wall with recorded routes for climbing. Pins alone said where
+   * a place was; these say what you would be doing there.
+   *
+   * A style swap (the dark-mode toggle) throws away every source and layer,
+   * so the drawing lives in one function that can be re-run whenever the
+   * style reloads, rather than in the effect body.
+   */
+  const [overlays, setOverlays] = useState<{ lines: LineIndex; walls: WallIndex } | null>(null);
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Late arrivals from an earlier activity still land in the shared cache,
+    // and still redraw -- the draw only picks the ids currently on screen.
+    const publish = () => {
+      if (!aliveRef.current) return;
+      const lines: LineIndex = {};
+      const walls: WallIndex = {};
+      for (const [id, geo] of geoCache) {
+        lines[id] = geo.lines;
+        walls[id] = geo.walls;
+      }
+      setOverlays({ lines, walls });
+    };
+    publish();
+
+    // Ask for each visible place once, a few at a time, and draw as they land.
+    const queue = reports.map((r) => r.trail.id).filter((id) => !geoRequested.has(id));
+    queue.forEach((id) => geoRequested.add(id));
+    const worker = async () => {
+      for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+        try {
+          const response = await fetch(`/api/geo?id=${encodeURIComponent(id)}`);
+          const body = (await response.json()) as {
+            lines?: [number, number][][];
+            walls?: [number, number, string, number][];
+            unavailable?: boolean;
+          };
+          if (body.unavailable) geoRequested.delete(id); // try again on the next visit to this view
+          geoCache.set(id, { lines: body.lines ?? [], walls: body.walls ?? [] });
+          publish();
+        } catch {
+          geoRequested.delete(id);
+        }
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(6, queue.length) }, worker));
+  }, [reports]);
+
+  const wallHandlersRef = useRef(false);
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  const drawRef = useRef<() => void>(() => {});
+  drawRef.current = () => {
+    const map = mapRef.current;
+    if (!map || !overlays) return;
+
+    const lineFeatures: unknown[] = [];
+    const wallFeatures: unknown[] = [];
+
+    for (const report of reports) {
+      const id = report.trail.id;
+      const color = cssColor(GRADE_COLOR[report.verdict.grade]);
+      const selected = id === selectedId;
+
+      if (activity === "climb") {
+        for (const [lon, lat, name, count] of overlays.walls[id] ?? []) {
+          wallFeatures.push({
+            type: "Feature",
+            properties: { id, name: `${name} (${count})`, color, sel: selected ? 1 : 0 },
+            geometry: { type: "Point", coordinates: [lon, lat] },
+          });
+        }
+      } else {
+        const runs = overlays.lines[id];
+        if (runs && runs.length > 0) {
+          lineFeatures.push({
+            type: "Feature",
+            properties: { id, color, sel: selected ? 1 : 0 },
+            geometry: { type: "MultiLineString", coordinates: runs },
+          });
+        }
+      }
+    }
+
+    const lines = { type: "FeatureCollection", features: lineFeatures };
+    const walls = { type: "FeatureCollection", features: wallFeatures };
+
+    try {
+      const lineSource = map.getSource("tc-lines");
+      if (lineSource) lineSource.setData(lines);
+      else {
+        map.addSource("tc-lines", { type: "geojson", data: lines });
+        map.addLayer({
+          id: "tc-lines-casing",
+          type: "line",
+          source: "tc-lines",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#ffffff",
+            "line-opacity": 0.7,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 7],
+          },
+        });
+        map.addLayer({
+          id: "tc-lines",
+          type: "line",
+          source: "tc-lines",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": ["get", "color"],
+            "line-opacity": ["case", ["==", ["get", "sel"], 1], 1, 0.8],
+            "line-width": [
+              "interpolate", ["linear"], ["zoom"],
+              8, ["case", ["==", ["get", "sel"], 1], 3, 1.6],
+              14, ["case", ["==", ["get", "sel"], 1], 6, 3.5],
+            ],
+          },
+        });
+      }
+
+      const wallSource = map.getSource("tc-walls");
+      if (wallSource) wallSource.setData(walls);
+      else {
+        map.addSource("tc-walls", { type: "geojson", data: walls });
+        map.addLayer({
+          id: "tc-walls",
+          type: "circle",
+          source: "tc-walls",
+          paint: {
+            "circle-color": ["get", "color"],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 2.5, 13, 5, 16, 8],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": ["case", ["==", ["get", "sel"], 1], 2, 1],
+            "circle-opacity": ["case", ["==", ["get", "sel"], 1], 1, 0.75],
+          },
+        });
+        map.addLayer({
+          id: "tc-wall-labels",
+          type: "symbol",
+          source: "tc-walls",
+          minzoom: 12.5,
+          layout: {
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 11,
+            "text-offset": [0, 1.1],
+            "text-anchor": "top",
+            "text-optional": true,
+          },
+          paint: {
+            "text-color": "#2a332c",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.4,
+          },
+        });
+      }
+
+      // Layer-bound handlers outlive a style swap, so bind them once.
+      if (!wallHandlersRef.current) {
+        wallHandlersRef.current = true;
+        map.on("click", "tc-walls", (payload?: unknown) => {
+          const features = (payload as { features?: { properties?: { id?: string } }[] })?.features;
+          const id = features?.[0]?.properties?.id;
+          // Opening an area, never closing it: a wall click is always "show me this".
+          if (id && id !== selectedRef.current) onSelectRef.current(id);
+        });
+        map.on("mouseenter", "tc-walls", () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "tc-walls", () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
+    } catch {
+      // The style is mid-load; the styledata listener below redraws once it lands.
+    }
+  };
+
+  useEffect(() => {
+    drawRef.current();
+  }, [overlays, reports, selectedId, activity, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    // Fires after every style (re)load, including the dark-mode swap.
+    map.on("styledata", () => {
+      if (!map.getLayer("tc-lines") || !map.getLayer("tc-walls")) drawRef.current();
+    });
   }, [mapReady]);
 
   useEffect(() => {

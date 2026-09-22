@@ -33,9 +33,73 @@ export interface Species {
   habits: string;
   /** Anything that changes whether you may keep it. */
   note?: string;
+  photo: Photo;
 }
 
-export const SPECIES: Record<SpeciesId, Species> = {
+export interface Photo {
+  src: string;
+  /** Who took it, as Wikimedia Commons credits them. */
+  credit: string;
+  license: "Public domain" | "CC BY-SA 4.0";
+  /** The file's Commons page, which carries the full licence. */
+  page: string;
+  /** Set when the photo shows a close relative, not this exact fish. */
+  caveat?: string;
+}
+
+const commons = (path: string) => {
+  const file = path.split("/")[2]!;
+  return {
+    src: `https://upload.wikimedia.org/wikipedia/commons/thumb/${path}/500px-${file}`,
+    page: `https://commons.wikimedia.org/wiki/File:${file}`,
+  };
+};
+
+/*
+ * Real photographs, from Wikimedia Commons. Public-domain images (mostly US
+ * Fish and Wildlife Service and National Park Service) were preferred; the
+ * two CC BY-SA photos are credited on screen as their licence requires.
+ */
+const PHOTOS: Record<SpeciesId, Photo> = {
+  brown: {
+    ...commons("2/27/Brown_Trout_(Salmo_trutta)_(53678765394).jpg"),
+    credit: "USFWS Mountain-Prairie",
+    license: "Public domain",
+  },
+  rainbow: {
+    ...commons("c/c1/Close_up_of_rainbow_trout_fish_underwater_oncorhynchus_mykiss.jpg"),
+    credit: "Eric Engbretson, USFWS",
+    license: "Public domain",
+  },
+  "bonneville-cutthroat": {
+    ...commons("4/49/Bonneville_cutthroat_october_2020.jpg"),
+    credit: "BRTorgersen",
+    license: "CC BY-SA 4.0",
+  },
+  "bear-lake-cutthroat": {
+    ...commons("5/5d/Trout_cutthroat_fish_oncorhynchus_clarkii_clarkii.jpg"),
+    credit: "Timothy Knepp, USFWS",
+    license: "Public domain",
+    caveat: "A coastal cutthroat, shown for the family markings; no free photo of the Bear Lake strain was available.",
+  },
+  brook: {
+    ...commons("e/ee/Brook_trout_in_water.jpg"),
+    credit: "Jay Fleming, US National Park Service",
+    license: "Public domain",
+  },
+  whitefish: {
+    ...commons("a/ae/Prosopium_williamsoni.jpg"),
+    credit: "Woostermike, English Wikipedia",
+    license: "Public domain",
+  },
+  kokanee: {
+    ...commons("8/87/Kokanee_salmon.jpg"),
+    credit: "Hemming1952",
+    license: "CC BY-SA 4.0",
+  },
+};
+
+const BASE: Record<SpeciesId, Omit<Species, "photo">> = {
   brown: {
     id: "brown",
     name: "Brown trout",
@@ -130,5 +194,9 @@ export const SPECIES: Record<SpeciesId, Species> = {
       "Eats plankton, so it rarely takes a fly. Caught by trolling a dodger with a small squid or spinner at the depth the schools are holding, usually mid-summer.",
   },
 };
+
+export const SPECIES = Object.fromEntries(
+  (Object.keys(BASE) as SpeciesId[]).map((id) => [id, { ...BASE[id], photo: PHOTOS[id] }]),
+) as Record<SpeciesId, Species>;
 
 export const SPECIES_IDS = Object.keys(SPECIES) as SpeciesId[];

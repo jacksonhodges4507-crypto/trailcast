@@ -243,6 +243,28 @@ filters to waters that hold that species.
 
 ---
 
+## The map shows what you would be doing
+
+Switching activity changes what is drawn, not just which pins appear:
+hiking, running and riding draw the trail itself from OpenStreetMap, fishing
+draws the fishable stretch of river (clipped to the reach, since a river is
+hundreds of miles long) or the lake shore, and climbing draws every wall with
+recorded routes from OpenBeta. Open a climbing area and its real routes are
+listed by wall, with grade, type and length.
+
+Both are fetched per place and cached at the edge — a day for routes, a week
+for trail shapes — so a slow or rate-limited upstream delays one overlay and
+never the scores. OSM features are matched by name inside a radius, because a
+bare radius query around a trailhead returns every social trail and service
+road in the canyon. → [`sources/osmLines.ts`](src/lib/sources/osmLines.ts),
+[`sources/openbetaLive.ts`](src/lib/sources/openbetaLive.ts)
+
+The import also caught two areas pinned in the wrong place (Ibex was 34 miles
+off), and a few OpenBeta walls whose pins sit in another city are dropped
+rather than drawn somewhere wrong.
+
+---
+
 ## Visitor reports, and why two people
 
 Sensors miss things a person sees in a second: a locked gate, downed trees,
@@ -310,7 +332,9 @@ cells at a time, and returns `scored` and `available` so the UI can say
 | [OSRM](https://project-osrm.org/) | drive times from the viewer's location (opt-in) | no |
 | [OpenFreeMap](https://openfreemap.org/) | basemap tiles | no |
 | [Anthropic API](https://docs.claude.com/) | *optional* NL parsing + narration | optional |
-| [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported, not live) | no |
+| [OpenBeta](https://openbeta.io/) | climbing area catalogue (imported); walls and routes (live, cached daily) | no |
+| [OpenStreetMap / Overpass](https://overpass-api.de/) | trail lines, river stretches and lake shorelines drawn on the map | no |
+| [Wikimedia Commons](https://commons.wikimedia.org/) | Fish Dex photographs (public domain or CC BY-SA, credited) | no |
 
 Climbing areas are imported from [OpenBeta](https://openbeta.io), an open
 climbing database, by walking its public GraphQL API. **Mountain Project is

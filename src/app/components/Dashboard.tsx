@@ -356,6 +356,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             reports={data.reports}
             selectedId={selectedId}
             onSelect={(id) => setSelectedId((current) => (current === id ? null : id))}
+            activity={activity}
           />
 
           <div className="legend">
