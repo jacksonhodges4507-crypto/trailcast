@@ -198,6 +198,34 @@ export default function AskBar({ onAnswer, coords, onShowMap, onPick, prefill }:
         </div>
       ) : null}
 
+      <form
+        className="ask-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit(question);
+        }}
+      >
+        <textarea
+          ref={boxRef}
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter asks; Shift+Enter makes a new line.
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit(question);
+            }
+          }}
+          rows={2}
+          placeholder="Ask Scout anything…"
+          aria-label="Ask Scout"
+          maxLength={400}
+        />
+        <button type="submit" disabled={busy || question.trim().length === 0} aria-label="Ask Scout">
+          {busy ? "…" : "→"}
+        </button>
+      </form>
+
       <div className="ask-history">
         <div className="ask-history-label">{history.length > 0 ? "Recent" : "Try"}</div>
         <ul>
@@ -241,34 +269,6 @@ export default function AskBar({ onAnswer, coords, onShowMap, onPick, prefill }:
           </button>
         ) : null}
       </div>
-
-      <form
-        className="ask-row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit(question);
-        }}
-      >
-        <textarea
-          ref={boxRef}
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter asks; Shift+Enter makes a new line.
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void submit(question);
-            }
-          }}
-          rows={2}
-          placeholder="Ask Scout anything…"
-          aria-label="Ask Scout"
-          maxLength={400}
-        />
-        <button type="submit" disabled={busy || question.trim().length === 0} aria-label="Ask Scout">
-          {busy ? "…" : "→"}
-        </button>
-      </form>
     </div>
   );
 }

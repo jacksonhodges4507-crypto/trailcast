@@ -8,6 +8,7 @@ import FishGuide from "./FishGuide";
 import UserReports from "./UserReports";
 import Directions from "./Directions";
 import ClimbRoutes from "./ClimbRoutes";
+import TrailLook from "./TrailLook";
 import type { SpeciesId } from "@/lib/fishing/species";
 import {
   GRADE_CLASS,
@@ -134,6 +135,10 @@ export default function TrailDetail({
                 : "Free-flow road time: no traffic, closures or chain controls."}
             </span>
           </div>
+        ) : null}
+
+        {verdict.activity === "hike" || verdict.activity === "mtb" || verdict.activity === "trail_run" ? (
+          <TrailLook name={trail.name} region={trail.region} blurb={trail.blurb} />
         ) : null}
 
         {verdict.activity === "climb" ? <ClimbRoutes trailId={trail.id} areaName={trail.name} /> : null}

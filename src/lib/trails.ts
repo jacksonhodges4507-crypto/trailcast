@@ -1,5 +1,6 @@
 import type { Trail } from "./types";
 import { OPENBETA_AREAS } from "./data/climbingAreas";
+import { dwrTrails } from "./fishing/dwr";
 
 /**
  * Seed dataset.
@@ -638,6 +639,7 @@ const CURATED_TRAILS: Trail[] = [
     exposed: true,
     waterCrossings: 0,
     blurb: "High-elevation reservoir known for cutthroat and kokanee. Wind, not warmth, is the usual problem.",
+    waterKind: "lake",
   },
   {
     id: "big-cottonwood-creek",
@@ -680,7 +682,11 @@ const CURATED_TRAILS: Trail[] = [
  * breadth. Curated entries come first so that where the two overlap, the
  * better-attributed record is the one a proximity or prominence cap keeps.
  */
-export const TRAILS: Trail[] = [...CURATED_TRAILS, ...OPENBETA_AREAS];
+/*
+ * Curated places first, then imported climbing areas, then every water DWR
+ * stocks (about eleven hundred). Duplicates of curated waters are dropped.
+ */
+export const TRAILS: Trail[] = [...CURATED_TRAILS, ...OPENBETA_AREAS, ...dwrTrails(CURATED_TRAILS)];
 
 export const TRAILS_BY_ID: Record<string, Trail> = Object.fromEntries(
   TRAILS.map((t) => [t.id, t]),

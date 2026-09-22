@@ -1,7 +1,7 @@
 "use client";
 
 import { SPECIES, SPECIES_IDS, type SpeciesId } from "@/lib/fishing/species";
-import { watersFor } from "@/lib/fishing/guide";
+import { allWatersFor } from "@/lib/fishing/guide";
 import { getTrail } from "@/lib/trails";
 
 export interface FishDexProps {
@@ -29,7 +29,7 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
             {species ? (
               <em>{species.scientific}</em>
             ) : (
-              `${SPECIES_IDS.length} species across ${new Set(SPECIES_IDS.flatMap(watersFor)).size} waters`
+              `${SPECIES_IDS.length} species across ${new Set(SPECIES_IDS.flatMap(allWatersFor)).size} waters`
             )}
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
             <div className="fish-block">
               <div className="fish-label">Where to find it</div>
               <div className="fish-species">
-                {watersFor(species.id).map((id) => {
+                {allWatersFor(species.id).slice(0, 24).map((id) => {
                   const water = getTrail(id);
                   if (!water) return null;
                   return (
@@ -104,6 +104,12 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
                   );
                 })}
               </div>
+              {allWatersFor(species.id).length > 24 ? (
+                <p className="fish-note">
+                  Showing the 24 best-stocked of {allWatersFor(species.id).length} Utah waters that hold this
+                  fish. Search the map for more.
+                </p>
+              ) : null}
             </div>
           </>
         ) : (
@@ -118,7 +124,7 @@ export default function FishDex({ focus, onFocus, onSelectWater, onClose }: Fish
                     {s.native ? "Native" : "Introduced"}
                   </span>
                   <em>
-                    {watersFor(id).length} water{watersFor(id).length === 1 ? "" : "s"}
+                    {allWatersFor(id).length} water{allWatersFor(id).length === 1 ? "" : "s"}
                   </em>
                 </button>
               );

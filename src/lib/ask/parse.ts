@@ -1,6 +1,7 @@
 import { ACTIVITY_IDS, ACTIVITIES } from "../activities";
 import { resolveDatePhrase, todayIso } from "../dates";
 import { findPlace } from "./places";
+import { findSubjects, namedPlace } from "./subject";
 import type { ActivityId, AskQuery } from "../types";
 
 const ACTIVITY_PATTERNS: [ActivityId, RegExp][] = [
@@ -106,9 +107,27 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
   };
   if (species) parts.push(`holding ${SPECIES_LABEL[species] ?? species}`);
 
+  /*
+   * Does the question name somewhere in particular? This runs before the
+   * generic search so that "whats the jordan river resivar" is answered
+   * about the Jordan River rather than turned into a hike query that
+   * confidently returns Angels Landing.
+   */
+  const subjects = findSubjects(question);
+  const subject = subjects[0];
+  if (subject && !subject.trail.activities.includes(activity)) {
+    activity = subject.trail.activities[0] ?? activity;
+    parts[0] = `${ACTIVITIES[activity].label.toLowerCase()} on ${date}`;
+  }
+  if (subject) parts.unshift(`about ${subject.trail.name}`);
+  const unknownPlace = subject ? undefined : (namedPlace(question) ?? undefined);
+
   return {
     activity,
     date,
+    subject: subject?.trail.id,
+    subjectAlternatives: subjects.slice(1).map((s) => s.trail.id),
+    unknownPlace,
     near: place?.label,
     origin: place ? { lat: place.lat, lon: place.lon, label: place.label } : undefined,
     withinMi,

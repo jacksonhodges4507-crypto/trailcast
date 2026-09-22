@@ -45,6 +45,17 @@ async function pool<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]>
  * Choose which areas to score when more match than we are willing to fetch.
  * With an origin, the nearest win; without one, the most substantial do.
  */
+/**
+ * How substantial a place is, for choosing what to score without a location:
+ * route count for climbing areas, fish stocked for DWR waters, and
+ * hand-curated places always first.
+ */
+function prominence(trail: Trail): number {
+  if (trail.routes !== undefined) return trail.routes;
+  if (trail.stockedFish !== undefined) return trail.stockedFish / 100;
+  return trail.sourceName ? 0 : 1e9;
+}
+
 export function selectCandidates(
   trails: Trail[],
   limit: number,
@@ -54,7 +65,7 @@ export function selectCandidates(
 
   const ranked = trails.slice().sort((a, b) => {
     if (origin) return haversineMi(origin, a) - haversineMi(origin, b);
-    return (b.routes ?? 0) - (a.routes ?? 0);
+    return prominence(b) - prominence(a);
   });
 
   return ranked.slice(0, limit);

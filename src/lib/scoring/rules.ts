@@ -565,14 +565,48 @@ export const rockRule: Rule = ({ trail, conditions }) => {
  * judgement a conditions app is well placed to make and an angler staring at
  * a pretty river is not.
  */
-export const waterTempRule: Rule = ({ conditions }) => {
-  const temp = conditions.waterTempF;
+/** Trout, salmon and grayling need cold water; bass, catfish and panfish do not. */
+const COLDWATER = new Set(["RB", "BC", "CR", "BL", "CT", "BK", "BN", "TG", "SP", "LT", "KO", "GR"]);
+
+function waterOf(trail: Trail): { lake: boolean; warmwaterOnly: boolean } {
+  const codes = trail.speciesCodes;
+  return {
+    lake: trail.waterKind === "lake",
+    warmwaterOnly: codes !== undefined && codes.length > 0 && !codes.some((c) => COLDWATER.has(c)),
+  };
+}
+
+export const waterTempRule: Rule = ({ conditions, trail }) => {
+  const water = waterOf(trail);
+  // Stream gauges measure moving water. A lake's surface temperature is a
+  // different thing, so borrowing the nearest river's reading would be wrong.
+  const temp = water.lake ? undefined : conditions.waterTempF;
   if (temp === undefined) {
+    if (water.lake) {
+      return missing("water_temp", "Water temperature", "No gauge measures this lake's temperature");
+    }
     return missing(
       "water_temp",
       "Water temperature",
       "No gauge reporting water temperature within 25 mi",
     );
+  }
+
+  if (water.warmwaterOnly) {
+    // Bass, catfish and panfish feed best in warm water.
+    const warmScore = temp >= 62 && temp <= 80 ? 100 : temp < 62 ? clamp(100 - (62 - temp) * 4) : clamp(100 - (temp - 80) * 8);
+    return {
+      id: "water_temp",
+      label: "Water temperature",
+      score: warmScore,
+      weight: 0,
+      display: `${round(temp)} \u00b0F`,
+      reason:
+        temp < 55
+          ? `The water's ${round(temp)} \u00b0F, cold for warmwater fish; go slow and fish deep`
+          : `The water's ${round(temp)} \u00b0F, comfortable for bass, catfish and panfish`,
+      sources: collect(conditions, ["waterTempF"]),
+    };
   }
 
   let score: number;
@@ -613,8 +647,9 @@ export const waterTempRule: Rule = ({ conditions }) => {
  * river long before it changes the number on the gauge, so the two are read
  * together rather than the flow figure being trusted alone.
  */
-export const waterFlowRule: Rule = ({ conditions }) => {
-  const flow = conditions.streamflowCfs;
+export const waterFlowRule: Rule = ({ conditions, trail }) => {
+  // Lakes do not have a flow; only recent rain (turbidity) applies.
+  const flow = waterOf(trail).lake ? undefined : conditions.streamflowCfs;
   const recentRain = conditions.precipitationPrior72hIn;
 
   if (flow === undefined && recentRain === undefined) {

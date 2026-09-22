@@ -30,7 +30,7 @@ interface RouteLike {
  * approach figures, so they show none rather than a confident wrong number.
  */
 export function routeFigures(route: RouteLike, activity: string): string[] {
-  if (route.sourceName === "OpenBeta") return [];
+  if (route.sourceName === "OpenBeta" || route.sourceName === "Utah DWR") return [];
 
   const miles = `${route.distanceMi} mi`;
   const gain = `${route.gainFt.toLocaleString()} ft gain`;
@@ -46,7 +46,7 @@ export function formatTrip(minutes: number, miles: number): string {
 }
 
 interface StatSource {
-  trail: { distanceMi: number; sourceName?: string; routes?: number };
+  trail: { distanceMi: number; sourceName?: string; routes?: number; lastStocked?: number };
   conditions: { tempMaxF?: number; windMph?: number; windGustMph?: number; precipitationChancePct?: number };
   verdict: { activity: string };
 }
@@ -67,8 +67,10 @@ export function quickStats(report: StatSource): QuickStat[] {
   const size =
     verdict.activity === "climb"
       ? { value: trail.routes ? `${trail.routes}` : dash, label: "Routes" }
-      : trail.sourceName === "OpenBeta"
-        ? { value: dash, label: "Length" }
+      : trail.lastStocked !== undefined
+        ? { value: `${trail.lastStocked}`, label: "Stocked" }
+        : trail.sourceName === "OpenBeta"
+          ? { value: dash, label: "Length" }
         : { value: `${trail.distanceMi} mi`, label: verdict.activity === "fish" ? "Access" : "Length" };
 
   return [

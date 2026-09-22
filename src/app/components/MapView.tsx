@@ -4,6 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActivityId, TrailReport } from "@/lib/types";
 import { GRADE_COLOR } from "./grade";
 
+/*
+ * Trail and wall overlays only draw once you are looking at somewhere in
+ * particular. Utah has a thousand stocked waters and several thousand
+ * climbing routes; drawing every line at state-wide zoom cost frames and
+ * told the reader nothing, since at that scale it is a smear of colour.
+ */
+const OVERLAY_MINZOOM = 9.5;
+
 /**
  * MapLibre is loaded from a CDN at runtime rather than bundled: it is a
  * ~900 kB dependency used by one component, and the list view -- the part
@@ -68,6 +76,7 @@ interface MapLibreMap {
   setLayoutProperty(layer: string, name: string, value: unknown): void;
   getLayer(id: string): unknown;
   getCanvas(): HTMLCanvasElement;
+  getZoom(): number;
 }
 
 interface MapLibreMarker {
@@ -224,6 +233,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
    * the same slow fetch and timed out again.
    */
   const [mapReady, setMapReady] = useState(false);
+  const [zoomedOut, setZoomedOut] = useState(true);
   const [tilesReady, setTilesReady] = useState(false);
   const [slow, setSlow] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -264,6 +274,8 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
         // work before a single tile arrives.
         mapRef.current = map;
         setMapReady(true);
+        setZoomedOut(map.getZoom() < OVERLAY_MINZOOM);
+        map.on("zoomend", () => setZoomedOut(map.getZoom() < OVERLAY_MINZOOM));
 
         map.on("load", () => {
           if (cancelled) return;
@@ -352,14 +364,27 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
     // On phones the map lives in its own tab and starts hidden (zero size).
     // When it first becomes visible, re-fit so the pins are framed properly.
     let lastWidth = container.clientWidth;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    /*
+     * Resizing on every observed frame made the canvas flicker through the
+     * column's expand animation: MapLibre re-renders at each intermediate
+     * width and the tiles cannot keep up. Settle first, then resize once.
+     */
     const observer = new ResizeObserver(() => {
-      mapRef.current?.resize();
-      const width = container.clientWidth;
-      if (lastWidth === 0 && width > 0) refitRef.current();
-      lastWidth = width;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        mapRef.current?.resize();
+        const width = container.clientWidth;
+        if (lastWidth === 0 && width > 0) refitRef.current();
+        lastWidth = width;
+      }, 160);
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    return () => {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    };
   }, [mapReady]);
 
   /*
@@ -496,6 +521,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
           id: "tc-lines-casing",
           type: "line",
           source: "tc-lines",
+          minzoom: OVERLAY_MINZOOM,
           layout: { "line-join": "round", "line-cap": "round" },
           paint: {
             "line-color": "#ffffff",
@@ -507,6 +533,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
           id: "tc-lines",
           type: "line",
           source: "tc-lines",
+          minzoom: OVERLAY_MINZOOM,
           layout: { "line-join": "round", "line-cap": "round" },
           paint: {
             "line-color": ["get", "color"],
@@ -528,6 +555,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
           id: "tc-walls",
           type: "circle",
           source: "tc-walls",
+          minzoom: OVERLAY_MINZOOM,
           paint: {
             "circle-color": ["get", "color"],
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 2.5, 13, 5, 16, 8],
@@ -737,6 +765,9 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
             ? `Live radar · ${new Date(radar.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · pins show the day's high`
             : "Loading radar… pins show the day's high"}
         </div>
+      ) : null}
+      {zoomedOut && mode !== "weather" ? (
+        <div className="map-hint">Zoom in to see trails, rivers and climbing walls</div>
       ) : null}
       {!tilesReady ? (
         <div className={slow ? "map-note map-note-slow" : "map-note"}>

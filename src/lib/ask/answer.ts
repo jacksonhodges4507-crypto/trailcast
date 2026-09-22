@@ -1,8 +1,8 @@
-import { TRAILS } from "../trails";
+import { TRAILS, getTrail } from "../trails";
 import { buildReports } from "../report";
 import { haversineMi, type LatLon } from "../geo";
 import { drivePenalty } from "../travel";
-import { watersFor } from "../fishing/guide";
+import { holdsSpecies } from "../fishing/guide";
 import type { SpeciesId } from "../fishing/species";
 import { formatDrive } from "../format";
 import { readSummaries } from "../reports/service";
@@ -12,7 +12,7 @@ export { formatDrive };
 import { gradeLabel, lowerFirst } from "../scoring";
 import { relativeLabel, todayIso } from "../dates";
 import { parseQuery } from "./parse";
-import { isLlmEnabled, narrate, refineQuery } from "./llm";
+import { isLlmEnabled, narrate, narrateUnknown, refineQuery } from "./llm";
 import type { AskAnswer, AskQuery, Trail, TrailReport } from "../types";
 
 /**
@@ -35,6 +35,16 @@ export function radiusFor(query: AskQuery): number | undefined {
 }
 
 function applyFilters(query: AskQuery): Trail[] {
+  // When the question names a place, the answer is about that place. Filters
+  // built for a search ("under 5 mi", "near Provo") would only get in the way.
+  if (query.subject) {
+    const named = [query.subject, ...(query.subjectAlternatives ?? [])]
+      .map(getTrail)
+      .filter((t): t is Trail => t !== undefined)
+      .filter((t) => t.id === query.subject || t.activities.includes(query.activity));
+    if (named.length > 0) return named;
+  }
+
   const radius = radiusFor(query);
 
   return TRAILS.filter((trail) => {
@@ -51,7 +61,7 @@ function applyFilters(query: AskQuery): Trail[] {
     if (query.wantsWater && !/\b(lake|falls|waterfall|reservoir|river|creek)\b/i.test(`${trail.name} ${trail.blurb}`)) {
       return false;
     }
-    if (query.species && !watersFor(query.species as SpeciesId).includes(trail.id)) return false;
+    if (query.species && !holdsSpecies(trail, query.species as SpeciesId)) return false;
 
     return true;
   });
@@ -154,6 +164,60 @@ function capitalise(text: string): string {
  * makes the same comparison the language model is asked to, from the same
  * facts, so Scout is fully testable and useful with no API key at all.
  */
+/**
+ * The answer to "what is X" / "how's X looking".
+ *
+ * A place the reader already has in mind does not need a recommendation; it
+ * needs to be told what the place is, how it is today, and honestly whether
+ * a different place of the same name might be the one they meant.
+ */
+function subjectNarrative(
+  query: AskQuery,
+  reports: TrailReport[],
+  top: TrailReport,
+  when: string,
+  doing: string,
+): string {
+  const trail = top.trail;
+  const sentences: string[] = [`${trail.name} is in ${trail.region}. ${trail.blurb}`];
+
+  const vetoed = top.verdict.factors.find((f) => f.veto);
+  if (top.verdict.grade === "unsafe" && vetoed) {
+    sentences.push(`I wouldn't go ${when} though — ${lowerFirst(vetoed.reason)}.`);
+  } else if (top.verdict.score !== undefined) {
+    sentences.push(
+      `For ${doing} ${when} it scores ${top.verdict.score} out of 100 — ${gradeLabel(top.verdict.grade).toLowerCase()}.`,
+    );
+    const best = top.verdict.factors
+      .filter((f): f is typeof f & { score: number } => f.score !== undefined)
+      .sort((a, b) => b.weight * b.score - a.weight * a.score)[0];
+    if (best) sentences.push(capitalise(lowerFirst(best.reason)) + ".");
+  } else {
+    sentences.push(`I couldn't get conditions for it ${when}, so I can't tell you how it is right now.`);
+  }
+
+  const weakest = top.verdict.factors
+    .filter((f): f is typeof f & { score: number } => f.score !== undefined)
+    .sort((a, b) => a.score - b.score)[0];
+  if (weakest && weakest.score < 75) sentences.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+
+  const crowd = crowdSentence(top);
+  if (crowd) sentences.push(crowd);
+
+  // Utah has four Mill Creeks. Say so rather than quietly picking one.
+  const others = reports
+    .filter((r) => r.trail.id !== trail.id)
+    .slice(0, 2)
+    .map((r) => `${r.trail.name} in ${r.trail.region}`);
+  if (others.length > 0) {
+    sentences.push(
+      `If you meant a different one, I also have ${others.join(" and ")} — tap either to switch.`,
+    );
+  }
+
+  return sentences.join(" ");
+}
+
 export function templateNarrative(
   query: AskQuery,
   reports: TrailReport[],
@@ -163,8 +227,19 @@ export function templateNarrative(
   const doing = ACTIVITY_DAY[query.activity] ?? "getting out";
 
   const top = reports[0];
+
+  // Saying "I don't have that" is a better answer than a confident wrong one.
+  if (!top && query.unknownPlace) {
+    return `I don't have ${query.unknownPlace} in my data, so I'd only be guessing. I cover Utah: every water the DWR stocks, the climbing areas on OpenBeta, and a hand-built set of trails. Try the name the way it appears on a map, or ask me what's good near a town instead.`;
+  }
   if (!top) {
     return `I couldn't find anywhere for ${query.interpretation}. Nothing in the dataset matches all of that at once, so try dropping one part of it: usually the place, the rock type or the fish.`;
+  }
+
+  // The question named a place, so answer about that place rather than
+  // pretending it was a search for somewhere to go.
+  if (query.subject && top.trail.id === query.subject) {
+    return subjectNarrative(query, reports, top, when, doing);
   }
 
   const scored = (report: TrailReport) =>
@@ -372,7 +447,12 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
           interpretation: `${refined.interpretation}, from your location`,
         };
 
-  const candidates = applyFilters(query);
+  /*
+   * The question named a place and we don't hold it. Returning the generic
+   * search anyway is how "whats the jordan river resivar" came back as
+   * Angels Landing — so answer with nothing, and say why.
+   */
+  const candidates = query.unknownPlace ? [] : applyFilters(query);
 
   const built = await buildReports({
     date: query.date,
@@ -382,10 +462,20 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
     signal: options.signal,
   });
 
-  const ranked = rankByProximity(built.reports, query.origin, query).slice(0, 5);
-  const results = await attachCrowdReports(ranked);
+  let ranked = rankByProximity(built.reports, query.origin, query);
+  // A question about a place is answered about that place, whatever the
+  // ranking would otherwise prefer.
+  if (query.subject) {
+    const i = ranked.findIndex((r) => r.trail.id === query.subject);
+    if (i > 0) ranked = [ranked[i]!, ...ranked.filter((_, j) => j !== i)];
+  }
+  const results = await attachCrowdReports(ranked.slice(0, 5));
 
-  const llmNarrative = useLlm ? await narrate(query, results) : null;
+  const llmNarrative = useLlm
+    ? query.unknownPlace
+      ? await narrateUnknown(options.question, query.unknownPlace, query.date)
+      : await narrate(query, results)
+    : null;
 
   return {
     query,

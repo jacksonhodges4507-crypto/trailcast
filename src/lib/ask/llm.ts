@@ -208,9 +208,29 @@ export async function narrate(
     "  a sensor reading or a veto.",
   ].join("\n");
 
+  /*
+   * A question that names a place is not a request for a recommendation.
+   * "What's the Jordan River Reservoir" wants to be told about that place,
+   * and told honestly if the name is ambiguous -- not sold a hike.
+   */
+  const subjectRules = query.subject
+    ? [
+        "",
+        "This question named a specific place, given first in options. Answer",
+        "ABOUT that place: what and where it is, then how it is on the date.",
+        "Do not recommend somewhere else instead.",
+        "The other options are places whose names are close to what was typed.",
+        "If the name was ambiguous, say in one clause that you also have them,",
+        "so the reader can correct you.",
+        "If the place has no conditions data, say that plainly rather than",
+        "filling the gap.",
+      ]
+    : [];
+
   const user = JSON.stringify(
     {
       question: query.interpretation,
+      askedAbout: query.subject ? options[0]?.name ?? null : null,
       date: query.date,
       activity: query.activity,
       origin: query.origin?.label ?? null,
@@ -221,5 +241,49 @@ export async function narrate(
     2,
   );
 
-  return call({ system, user, maxTokens: 600, timeoutMs: 14000 });
+  return call({
+    system: [system, ...subjectRules].join("\n"),
+    user,
+    maxTokens: 600,
+    timeoutMs: 14000,
+  });
+}
+
+/**
+ * The answer when the question named a place TrailCast does not hold.
+ *
+ * The failure that made this necessary was Scout answering "what's the
+ * Jordan River Reservoir" with Angels Landing: a wrong answer given
+ * confidently. The fix is a path where the honest answer -- "I don't have
+ * that" -- is the only one available, and general knowledge is clearly
+ * labelled as general knowledge rather than dressed up as a forecast.
+ */
+export async function narrateUnknown(
+  question: string,
+  place: string,
+  date: string,
+): Promise<string | null> {
+  const system = [
+    "You are Scout, TrailCast's assistant: warm, direct, first person, brief.",
+    "",
+    "TrailCast has NO data for the place this person named. That is the",
+    "answer, and you must give it first.",
+    "",
+    "Rules:",
+    "- 2-4 conversational sentences. Prose only.",
+    "- First sentence: say plainly you don't have that place in TrailCast.",
+    "- Then, if you recognise the name, say in one or two sentences what and",
+    "  where it is, and label it clearly as general knowledge rather than",
+    "  live conditions: you have no forecast, flow, score or report for it.",
+    "- If you do not recognise it, say so. Do not guess at a similar name,",
+    "  and never present a guess as a fact.",
+    "- Never invent a temperature, flow, score, stocking record or condition.",
+    "- TrailCast covers Utah: every water the DWR stocks, OpenBeta's climbing",
+    "  areas and a hand-built trail set. Offer the nearest useful next step,",
+    "  such as trying the name as it appears on a map, or asking what's good",
+    "  near a town.",
+  ].join("\n");
+
+  const user = JSON.stringify({ question, placeAsTyped: place, date }, null, 2);
+  return call({ system, user, maxTokens: 400, timeoutMs: 12000 });
 }

@@ -112,6 +112,13 @@ export interface Trail {
   rockTypeSource?: "curated" | "inferred";
   /** Route count, where the source dataset provides one. Used for prominence. */
   routes?: number;
+  /** Fishing waters: a lake/reservoir/pond, or moving water. */
+  waterKind?: "lake" | "river";
+  /** Fishing waters imported from DWR: stocked species codes (see fishing/dwr.ts). */
+  speciesCodes?: string[];
+  /** DWR waters: last year stocked, and fish stocked since 2016 (a prominence proxy). */
+  lastStocked?: number;
+  stockedFish?: number;
   /** Attribution for imported areas. */
   sourceName?: string;
   sourceUrl?: string;
@@ -278,6 +285,12 @@ export interface AskQuery {
   rockType?: RockType;
   /** Only waters holding this fish (a Fish Dex species id). */
   species?: string;
+  /** A specific place the question named, when we hold one (a trail id). */
+  subject?: string;
+  /** Other places the name could have meant, best first (trail ids). */
+  subjectAlternatives?: string[];
+  /** A place the question named that we do not hold, so we can say so. */
+  unknownPlace?: string;
   /** How the caller's phrasing was turned into this query. */
   interpretation: string;
   /** "llm" when a model parsed it, "rules" for the deterministic parser. */
