@@ -1,4 +1,4 @@
-import { withCache } from "../cache";
+import { OSM_LINES } from "../data/osmLines";
 import { getTrail } from "../trails";
 import { haversineMi } from "../geo";
 
@@ -103,7 +103,7 @@ export function simplify(points: Line, epsilon: number): Line {
 /** Turn an Overpass answer into drawable runs, clipped and simplified. */
 export function toLines(elements: OverpassElement[], spec: Spec, lat: number, lon: number): Line[] {
   const runs: Line[] = [];
-  const epsilon = spec.kind === "lake" ? 0.0006 : 0.00012;
+  const epsilon = spec.kind === "lake" ? 0.0008 : 0.00015;
   const radiusMi = spec.radius / 1609.34;
 
   for (const element of elements) {
@@ -123,34 +123,42 @@ export function hasLines(trailId: string): boolean {
   return trailId in OSM_SPECS;
 }
 
-export async function linesFor(trailId: string): Promise<Line[]> {
+/**
+ * Lines are served from a snapshot, not fetched per request. Public Overpass
+ * instances refuse or time out requests from cloud IP ranges often enough
+ * that a live call from the server left the map bare; trail shapes change on
+ * the scale of years, so a snapshot refreshed by `scripts/import-osm-lines.ts`
+ * is the right trade.
+ */
+export function linesFor(trailId: string): Line[] {
+  return OSM_LINES[trailId] ?? [];
+}
+
+/** Query Overpass for one place. Used by the import script, not at runtime. */
+export async function fetchLinesLive(trailId: string): Promise<Line[]> {
   const spec = OSM_SPECS[trailId];
   const trail = getTrail(trailId);
   if (!spec || !trail) return [];
 
   const body = `data=${encodeURIComponent(`[out:json][timeout:25];${selector(spec, trail.lat, trail.lon)}out geom;`)}`;
-
-  const { value } = await withCache(`osm:${trailId}`, { ttlSeconds: 7 * 86_400, staleSeconds: 30 * 86_400 }, async () => {
-    let lastError: unknown = new Error("no mirror answered");
-    for (const mirror of MIRRORS) {
-      try {
-        const response = await fetch(mirror, {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-            "user-agent": "TrailCast (portfolio project)",
-          },
-          body,
-          signal: AbortSignal.timeout(20_000),
-        });
-        if (!response.ok) throw new Error(`${mirror} answered ${response.status}`);
-        const json = (await response.json()) as { elements?: OverpassElement[] };
-        return toLines(json.elements ?? [], spec, trail.lat, trail.lon);
-      } catch (error) {
-        lastError = error;
-      }
+  let lastError: unknown = new Error("no mirror answered");
+  for (const mirror of MIRRORS) {
+    try {
+      const response = await fetch(mirror, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "user-agent": "TrailCast (portfolio project)",
+        },
+        body,
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) throw new Error(`${mirror} answered ${response.status}`);
+      const json = (await response.json()) as { elements?: OverpassElement[] };
+      return toLines(json.elements ?? [], spec, trail.lat, trail.lon);
+    } catch (error) {
+      lastError = error;
     }
-    throw lastError;
-  });
-  return value;
+  }
+  throw lastError;
 }

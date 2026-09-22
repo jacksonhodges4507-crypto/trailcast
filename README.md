@@ -252,9 +252,12 @@ hundreds of miles long) or the lake shore, and climbing draws every wall with
 recorded routes from OpenBeta. Open a climbing area and its real routes are
 listed by wall, with grade, type and length.
 
-Both are fetched per place and cached at the edge — a day for routes, a week
-for trail shapes — so a slow or rate-limited upstream delays one overlay and
-never the scores. OSM features are matched by name inside a radius, because a
+Walls and routes are fetched per area from OpenBeta and cached at the edge
+for a day. Trail shapes come from a snapshot of OpenStreetMap
+([`data/osmLines.ts`](src/lib/data/osmLines.ts), refreshed by
+`scripts/import-osm-lines.ts`): public Overpass servers refuse or time out
+requests from cloud IP ranges often enough that fetching them live left the
+map bare, and trails move on a scale of years. OSM features are matched by name inside a radius, because a
 bare radius query around a trailhead returns every social trail and service
 road in the canyon. → [`sources/osmLines.ts`](src/lib/sources/osmLines.ts),
 [`sources/openbetaLive.ts`](src/lib/sources/openbetaLive.ts)
@@ -286,6 +289,18 @@ have made the same one inside 48 hours.
 
 Storage is Upstash Redis when connected, and process memory otherwise.
 → [`reports/`](src/lib/reports)
+
+---
+
+## Weather without the rate limit
+
+Each grid cell used to cost its own Open-Meteo request, so a page load sent
+about forty at once from a shared cloud IP, and Open-Meteo started answering
+`429 Too Many Requests`. Whichever cells lost that race showed "no data" for
+temperature, wind and precipitation. Requests arriving together are now
+merged into one multi-location call, the raw forecast is cached per point
+whatever day you pick, and a rate limit is retried with backoff instead of
+dropping the data. → [`sources/batch.ts`](src/lib/sources/batch.ts)
 
 ---
 

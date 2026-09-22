@@ -36,9 +36,11 @@ export interface AskBarProps {
   onAnswer: (answer: AskAnswer) => void;
   /** The viewer's coarsened location, when they have chosen to share it. */
   coords?: { lat: number; lon: number } | null;
+  /** Phones: switch to the map tab to see the answer's places. */
+  onShowMap?: () => void;
 }
 
-export default function AskBar({ onAnswer, coords }: AskBarProps) {
+export default function AskBar({ onAnswer, coords, onShowMap }: AskBarProps) {
   const [question, setQuestion] = useState("");
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -195,6 +197,11 @@ export default function AskBar({ onAnswer, coords }: AskBarProps) {
             read as: {answer.query.interpretation} · parsed by {answer.query.parsedBy} ·
             narrated by {answer.narratedBy}
           </p>
+          {onShowMap && answer.results.length > 0 ? (
+            <button type="button" className="mobile-only map-link" onClick={onShowMap}>
+              <span aria-hidden>🗺️</span> Open {answer.results[0]!.trail.name} on the map
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

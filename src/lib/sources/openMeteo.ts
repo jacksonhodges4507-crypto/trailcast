@@ -1,6 +1,7 @@
 import type { SourceAdapter, SourceContext, SourceResult } from "./types";
-import { asNumberArray, asRecord, asStringArray, fetchJson, key } from "./types";
+import { asNumberArray, asRecord, asStringArray, key } from "./types";
 import type { SourceRef } from "../types";
+import { createBatcher, pointUrl } from "./batch";
 
 const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
@@ -24,21 +25,28 @@ const DAILY = [
   "daylight_duration",
 ] as const;
 
+const PARAMS: Record<string, string> = {
+  hourly: HOURLY.join(","),
+  daily: DAILY.join(","),
+  timezone: "auto",
+  temperature_unit: "fahrenheit",
+  wind_speed_unit: "mph",
+  precipitation_unit: "inch",
+  past_days: "3",
+  forecast_days: "7",
+};
+
 function buildUrl(lat: number, lon: number): string {
-  const params = new URLSearchParams({
-    latitude: lat.toFixed(4),
-    longitude: lon.toFixed(4),
-    hourly: HOURLY.join(","),
-    daily: DAILY.join(","),
-    timezone: "auto",
-    temperature_unit: "fahrenheit",
-    wind_speed_unit: "mph",
-    precipitation_unit: "inch",
-    past_days: "3",
-    forecast_days: "7",
-  });
-  return `${ENDPOINT}?${params.toString()}`;
+  return pointUrl(ENDPOINT, PARAMS, lat, lon);
 }
+
+const forecastFor = createBatcher({
+  endpoint: ENDPOINT,
+  params: PARAMS,
+  ttlSeconds: 30 * 60,
+  staleSeconds: 12 * 60 * 60,
+  label: "Open-Meteo",
+});
 
 /**
  * Length values arrive in whatever unit the model reports. Rather than
@@ -79,10 +87,9 @@ export const openMeteoAdapter: SourceAdapter = {
   ttlSeconds: 15 * 60,
   staleSeconds: 6 * 60 * 60,
 
-  async fetch({ point, dates, signal }: SourceContext): Promise<SourceResult> {
+  async fetch({ point, dates }: SourceContext): Promise<SourceResult> {
     const url = buildUrl(point.lat, point.lon);
-    const payload = asRecord(await fetchJson(url, 8000, signal));
-    if (!payload) throw new Error("Open-Meteo returned a non-object payload");
+    const payload = await forecastFor(point.lat, point.lon);
 
     const fetchedAt = new Date().toISOString();
     const timezone =

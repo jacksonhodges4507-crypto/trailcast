@@ -75,7 +75,13 @@ export default function ClimbRoutes({ trailId }: { trailId: string }) {
     [data, filter, wall],
   );
 
-  if (missing) return null;
+  if (missing) {
+    return (
+      <div className="climbs climbs-loading">
+        Route list is unavailable right now — OpenBeta did not answer. Scores above are unaffected.
+      </div>
+    );
+  }
   if (!data) return <div className="climbs climbs-loading">Loading routes…</div>;
 
   const topWalls = data.walls

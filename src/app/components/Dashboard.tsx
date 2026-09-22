@@ -173,6 +173,14 @@ export default function Dashboard({ initial, today }: DashboardProps) {
       );
   }, [data.reports, sortBy]);
 
+  /*
+   * Phones get two tabs instead of a list stacked on a squeezed map: "Ask"
+   * (the question box, answer and list) and "Map" (the map, full height).
+   * On wider screens both are visible and the tabs are hidden by CSS.
+   */
+  const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const showMap = useCallback(() => setMobileView("map"), []);
+
   const selected = useMemo(
     () => data.reports.find((report) => report.trail.id === selectedId) ?? null,
     [data.reports, selectedId],
@@ -200,7 +208,9 @@ export default function Dashboard({ initial, today }: DashboardProps) {
 
       {error ? <div className="banner">{error}</div> : null}
 
-      <div className={`workspace${selected || dexOpen ? " has-detail" : ""}`}>
+      <div
+        className={`workspace view-${mobileView}${selected || dexOpen ? " has-detail" : ""}`}
+      >
         <div className="rail">
           <div className="controls">
             <div className="segmented" role="group" aria-label="Activity">
@@ -275,7 +285,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             {locError ? <span className="locate-error">{locError}</span> : null}
           </div>
 
-          <AskBar onAnswer={handleAnswer} coords={coords} />
+          <AskBar onAnswer={handleAnswer} coords={coords} onShowMap={showMap} />
 
           {loading ? (
             <div className="loading">Scoring {ACTIVITIES[activity].label.toLowerCase()} conditions…</div>
@@ -347,6 +357,9 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                   </div>
                 </button>
               ))}
+              <button type="button" className="mobile-only map-link" onClick={showMap}>
+                <span aria-hidden>🗺️</span> See these {listed.length} on the map
+              </button>
             </div>
           )}
         </div>
@@ -403,6 +416,17 @@ export default function Dashboard({ initial, today }: DashboardProps) {
           />
         ) : null}
       </div>
+
+      <nav className="mobile-tabs" aria-label="View">
+        <button type="button" aria-pressed={mobileView === "list"} onClick={() => setMobileView("list")}>
+          <span aria-hidden>💬</span>
+          Ask &amp; list
+        </button>
+        <button type="button" aria-pressed={mobileView === "map"} onClick={() => setMobileView("map")}>
+          <span aria-hidden>🗺️</span>
+          Map
+        </button>
+      </nav>
     </div>
   );
 }

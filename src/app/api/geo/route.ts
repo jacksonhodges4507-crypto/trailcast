@@ -10,8 +10,8 @@ export const maxDuration = 60;
 /**
  * GET /api/geo?id=lake-blanche
  *
- * What to draw for one place: trail or river lines from OpenStreetMap, or
- * climbing walls from OpenBeta. One place per request, so each is cached at
+ * What to draw for one place: trail or river lines from an OpenStreetMap
+ * snapshot, or climbing walls live from OpenBeta. One place per request, so each is cached at
  * the edge on its own and one slow upstream never holds up the rest.
  */
 export async function GET(request: Request): Promise<NextResponse> {
@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const [lines, walls] = await Promise.all([
-      hasLines(id) ? linesFor(id) : Promise.resolve([]),
+      Promise.resolve(hasLines(id) ? linesFor(id) : []),
       hasClimbData(id) ? wallsFor(id) : Promise.resolve([]),
     ]);
     return NextResponse.json(

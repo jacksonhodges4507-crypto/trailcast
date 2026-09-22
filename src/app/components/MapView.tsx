@@ -286,12 +286,20 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
    * watches the window -- so without this the canvas keeps its old width and
    * the map stops short of the space it has.
    */
+  const refitRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
 
+    // On phones the map lives in its own tab and starts hidden (zero size).
+    // When it first becomes visible, re-fit so the pins are framed properly.
+    let lastWidth = container.clientWidth;
     const observer = new ResizeObserver(() => {
       mapRef.current?.resize();
+      const width = container.clientWidth;
+      if (lastWidth === 0 && width > 0) refitRef.current();
+      lastWidth = width;
     });
     observer.observe(container);
     return () => observer.disconnect();
@@ -537,7 +545,16 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
       markersRef.current.set(report.trail.id, { marker, el });
     }
 
-    if (reports.length > 0) {
+    refitRef.current = () => fit(0);
+    fit(600);
+
+    function fit(duration: number) {
+      if (!map || reports.length === 0) return;
+      const target = reports.find((r) => r.trail.id === selectedRef.current);
+      if (target) {
+        map.flyTo({ center: [target.trail.lon, target.trail.lat], zoom: 11, duration });
+        return;
+      }
       let minLon = Infinity;
       let minLat = Infinity;
       let maxLon = -Infinity;
@@ -555,7 +572,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
           [minLon, minLat],
           [maxLon, maxLat],
         ],
-        { padding: 70, maxZoom: 11, duration: 600 },
+        { padding: 70, maxZoom: 11, duration },
       );
     }
   }, [reports, mapReady]);

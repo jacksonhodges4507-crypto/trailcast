@@ -1,8 +1,23 @@
 import type { SourceAdapter, SourceContext, SourceResult } from "./types";
-import { asNumberArray, asRecord, asStringArray, fetchJson, key } from "./types";
+import { asNumberArray, asRecord, asStringArray, key } from "./types";
+import { createBatcher, pointUrl } from "./batch";
 import type { SourceRef } from "../types";
 
 const ENDPOINT = "https://air-quality-api.open-meteo.com/v1/air-quality";
+
+const AQ_PARAMS: Record<string, string> = {
+  hourly: "us_aqi,pm2_5",
+  timezone: "auto",
+  forecast_days: "5",
+};
+
+const airFor = createBatcher({
+  endpoint: ENDPOINT,
+  params: AQ_PARAMS,
+  ttlSeconds: 45 * 60,
+  staleSeconds: 12 * 60 * 60,
+  label: "Open-Meteo Air Quality",
+});
 
 /**
  * Air quality matters more than people expect in the Mountain West: summer
@@ -17,18 +32,9 @@ export const airQualityAdapter: SourceAdapter = {
   ttlSeconds: 30 * 60,
   staleSeconds: 6 * 60 * 60,
 
-  async fetch({ point, dates, signal }: SourceContext): Promise<SourceResult> {
-    const params = new URLSearchParams({
-      latitude: point.lat.toFixed(4),
-      longitude: point.lon.toFixed(4),
-      hourly: "us_aqi,pm2_5",
-      timezone: "auto",
-      forecast_days: "5",
-    });
-    const url = `${ENDPOINT}?${params.toString()}`;
-
-    const payload = asRecord(await fetchJson(url, 8000, signal));
-    if (!payload) throw new Error("Air-quality API returned a non-object payload");
+  async fetch({ point, dates }: SourceContext): Promise<SourceResult> {
+    const url = pointUrl(ENDPOINT, AQ_PARAMS, point.lat, point.lon);
+    const payload = await airFor(point.lat, point.lon);
 
     const fetchedAt = new Date().toISOString();
     const makeRef = (field: string): SourceRef => ({

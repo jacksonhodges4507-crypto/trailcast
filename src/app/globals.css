@@ -1901,3 +1901,106 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ------------------------------------------------------------ phone tabs -- */
+
+.mobile-tabs,
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-only {
+    display: flex;
+  }
+
+  .map-link {
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+    font: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 35;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-strong);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 18px rgba(var(--shadow-rgb), 0.12);
+  }
+
+  .mobile-tabs button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 58px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mobile-tabs button span {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .mobile-tabs button[aria-pressed="true"] {
+    color: var(--accent);
+    box-shadow: inset 0 3px 0 var(--accent);
+  }
+
+  /* One view at a time; the map gets the whole screen when it is shown. */
+  .workspace.view-list .canvas {
+    display: none;
+  }
+
+  .workspace.view-map .rail {
+    display: none;
+  }
+
+  /* Full-screen map above the tab bar, like a maps app. */
+  .workspace.view-map .canvas {
+    position: fixed;
+    inset: 0 0 calc(58px + env(safe-area-inset-bottom, 0px)) 0;
+    height: auto;
+    min-height: 0;
+    z-index: 20;
+    border-bottom: none;
+  }
+
+  .rail {
+    border-top: none;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The detail sheet sits above the tab bar, not under it. */
+  .detail {
+    inset: auto 0 calc(58px + env(safe-area-inset-bottom, 0px)) 0;
+    max-height: calc(86vh - 58px);
+  }
+
+  .legend {
+    bottom: 10px;
+  }
+}
