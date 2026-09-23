@@ -69,3 +69,29 @@ describe("Scout answering about a place", () => {
     expect(answer.narrative).toMatch(/don't have Fake Mcfakeface Reservoir/);
   });
 });
+
+describe("a long question still names its place", () => {
+  it("cuts the sentence at the first word that isn't part of a name", () => {
+    expect(namedPlace("how is dogwood crag looking this time of day on Friday")).toBe(
+      "Dogwood Crag",
+    );
+    expect(namedPlace("conditions at rock canyon tomorrow")).toBe("Rock Canyon");
+    expect(namedPlace("is the ferguson canyon wall dry today")).toBe("Ferguson Canyon Wall");
+  });
+
+  it("still refuses to treat a search as a place", () => {
+    expect(namedPlace("where should i ride near park city")).toBeNull();
+    expect(namedPlace("a shady hike saturday")).toBeNull();
+    expect(namedPlace("somewhere good to climb this weekend")).toBeNull();
+  });
+
+  it("never answers a named place we don't hold with a generic pick", async () => {
+    const answer = await ask({
+      question: "how is dogwood mcfakeface crag looking on friday",
+      allowLlm: false,
+      today: "2026-09-23",
+    });
+    expect(answer.results).toEqual([]);
+    expect(answer.narrative).toMatch(/don't have/i);
+  });
+});

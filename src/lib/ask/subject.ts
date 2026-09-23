@@ -174,7 +174,8 @@ export function findSubject(question: string): SubjectMatch | null {
   return findSubjects(question, 1)[0] ?? null;
 }
 
-const ASKING_ABOUT = /^\s*(?:what(?:'?s| is| are)?|where(?:'?s| is)?|how(?:'?s| is)?|tell me about|hows|whats|wheres)\s+(?:the\s+|a\s+)?/i;
+const ASKING_ABOUT =
+  /^\s*(?:what(?:'?s| is| are)?|where(?:'?s| is)?|how(?:'?s| is| are)?|tell me about|hows|whats|wheres|is|are|does|do|can i|should i|conditions? (?:at|for|on)|weather (?:at|for|on))\s+(?:the\s+|a\s+)?/i;
 const NOT_A_PLACE =
   /\b(i|we|you|my|me|should|can|could|would|ride|riding|run|running|go|going|somewhere|anything|best|good|nearby|weekend|saturday|sunday|monday|tuesday|wednesday|thursday|friday|where|what|how)\b/i;
 const PLACE_WORD = /\b(reservoir|resivar|resevoir|reservior|lake|river|creek|canyon|peak|mountain|trail|pond|fork|wall|crag|falls?)\b/i;
@@ -185,12 +186,32 @@ const PLACE_WORD = /\b(reservoir|resivar|resevoir|reservior|lake|river|creek|can
  */
 export function namedPlace(question: string): string | null {
   const text = question.trim().replace(/[?.!]+$/, "");
-  const phrase = text
+
+  /*
+   * Take the name, not the sentence.
+   *
+   * This used to require the whole remainder of the question to look like a
+   * place name, and gave up past five words. "How is dogwood crag looking
+   * this time of day on Friday" is seven, so it gave up -- and the caller
+   * then fell through to a generic search and answered with a crag five
+   * hours away, stated as fact. A confident wrong answer is the worst
+   * failure this thing can have, so the extractor now cuts the sentence at
+   * the first word that is plainly not part of a name.
+   */
+  const CUT =
+    /\b(looking|look|looks|right now|now|today|tonight|tomorrow|this (?:morning|afternoon|evening|weekend|time)|next week|on|at|in|for|during|conditions?|weather|climbing|hiking|fishing|riding|running|like|and|or|with|if|when|how|what|where|why|dry|wet|open|closed|busy|crowded|good|bad|okay|ok|safe|worth|mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+
+  // Strip the opening twice: "how is the ..." sheds "how is" then "the",
+  // and "conditions at rock canyon" sheds the lead before the cut runs, so
+  // the cut is never looking at the first word of the name.
+  let phrase = text
     .replace(ASKING_ABOUT, "")
-    .replace(/\b(like|conditions?|weather|fishing|fish|hiking|climbing|today|tomorrow|right now|this weekend)\b/gi, "")
-    .replace(/^\s*(?:at|in|on|near|to|around|by|the|a)\s+/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(ASKING_ABOUT, "")
+    .replace(/^\s*(?:at|in|on|near|to|around|by|the|a)\s+/i, "");
+
+  const cut = phrase.search(CUT);
+  if (cut > 0) phrase = phrase.slice(0, cut);
+  phrase = phrase.replace(/\s+/g, " ").trim();
 
   // Only claim we don't hold somewhere when the question clearly named a
   // place. "Where should I ride near Park City" is a search, not a place.

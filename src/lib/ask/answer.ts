@@ -585,6 +585,13 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
    */
   const candidates = query.unknownPlace ? [] : applyFilters(query);
 
+  /*
+   * Asked about a place we do not hold, the only honest answer is that we do
+   * not hold it. "How is Dogwood Crag looking Friday" came back recommending
+   * a crag five hours away, stated as fact, because the search ran anyway --
+   * which is the single worst thing this can do.
+   */
+
   const built = await buildReports({
     date: query.date,
     activity: query.activity,
