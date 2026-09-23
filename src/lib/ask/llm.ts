@@ -22,9 +22,39 @@ interface CallOptions {
  * more dependency for two calls that are a POST and a field read, and keeping
  * it out means the ask layer has no install-time coupling to a vendor.
  */
+/**
+ * Why the last model call did not produce prose.
+ *
+ * Falling back silently is right for the reader -- they get a real answer
+ * either way -- but it made the feature undebuggable from outside: a missing
+ * key, a rejected key and a rate limit all looked identical, which is
+ * exactly the confusion that cost an afternoon. This records the reason, and
+ * the ask endpoint reports it. It never carries the key or any response
+ * body, only a status.
+ */
+export type LlmStatus =
+  | "off"
+  | "ok"
+  | "unauthorized"
+  | "rate-limited"
+  | "credit"
+  | "timeout"
+  | "network"
+  | `http-${number}`
+  | "empty";
+
+let lastStatus: LlmStatus = "off";
+
+export function llmStatus(): LlmStatus {
+  return lastStatus;
+}
+
 async function call(options: CallOptions): Promise<string | null> {
   const apiKey = process.env["ANTHROPIC_API_KEY"];
-  if (!apiKey) return null;
+  if (!apiKey) {
+    lastStatus = "off";
+    return null;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -46,7 +76,17 @@ async function call(options: CallOptions): Promise<string | null> {
       }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      lastStatus =
+        response.status === 401 || response.status === 403
+          ? "unauthorized"
+          : response.status === 429
+            ? "rate-limited"
+            : response.status === 400
+              ? "credit"
+              : (`http-${response.status}` as LlmStatus);
+      return null;
+    }
 
     const payload = (await response.json()) as {
       content?: { type?: string; text?: string }[];
@@ -58,10 +98,17 @@ async function call(options: CallOptions): Promise<string | null> {
       .join("")
       .trim();
 
-    return text && text.length > 0 ? text : null;
-  } catch {
+    if (text && text.length > 0) {
+      lastStatus = "ok";
+      return text;
+    }
+    lastStatus = "empty";
+    return null;
+  } catch (error) {
     // Any failure here is non-fatal by design: the caller falls back to the
-    // deterministic path and the user never sees an error.
+    // deterministic path and the user never sees an error. It is recorded
+    // so that "the AI isn't working" is answerable without guessing.
+    lastStatus = error instanceof Error && error.name === "AbortError" ? "timeout" : "network";
     return null;
   } finally {
     clearTimeout(timer);

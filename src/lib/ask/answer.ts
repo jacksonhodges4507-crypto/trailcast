@@ -13,7 +13,7 @@ export { formatDrive };
 import { gradeLabel, lowerFirst } from "../scoring";
 import { relativeLabel, todayIso } from "../dates";
 import { parseQuery } from "./parse";
-import { isLlmEnabled, narrate, narrateUnknown, refineQuery } from "./llm";
+import { isLlmEnabled, llmStatus, narrate, narrateUnknown, refineQuery } from "./llm";
 import type { AskAnswer, AskQuery, Trail, TrailReport } from "../types";
 
 /**
@@ -614,5 +614,6 @@ export async function ask(options: AskOptions): Promise<AskAnswer> {
     results,
     sourceStatus: built.sourceStatus,
     narratedBy: llmNarrative ? "llm" : "template",
+    llm: useLlm ? llmStatus() : "off",
   };
 }

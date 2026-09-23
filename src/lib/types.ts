@@ -353,4 +353,10 @@ export interface AskAnswer {
   results: TrailReport[];
   sourceStatus: SourceStatus[];
   narratedBy: "llm" | "template";
+  /**
+   * Why the model did or did not write this answer. Diagnostic only: a
+   * reader never sees it, but "the AI isn't working" is otherwise
+   * unanswerable from outside the deployment.
+   */
+  llm?: string;
 }
