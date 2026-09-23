@@ -40,7 +40,7 @@ export type LlmStatus =
   | "credit"
   | "timeout"
   | "network"
-  | `http-${number}`
+  | `http-${string}`
   | "empty";
 
 let lastStatus: LlmStatus = "off";
@@ -77,14 +77,29 @@ async function call(options: CallOptions): Promise<string | null> {
     });
 
     if (!response.ok) {
+      /*
+       * A 400 covers several unrelated causes -- an exhausted balance, a
+       * model name the account cannot use, a malformed request -- and
+       * guessing between them from the status alone is how an afternoon
+       * gets spent. The API states the reason in its own error body, so
+       * that is what gets recorded: its type, and the first part of its
+       * message. No key and no request content, only the complaint.
+       */
+      let detail = "";
+      try {
+        const body = (await response.json()) as { error?: { type?: string; message?: string } };
+        const kind = body.error?.type ?? "";
+        const message = (body.error?.message ?? "").slice(0, 120);
+        detail = [kind, message].filter(Boolean).join(": ");
+      } catch {
+        detail = "";
+      }
       lastStatus =
         response.status === 401 || response.status === 403
           ? "unauthorized"
           : response.status === 429
             ? "rate-limited"
-            : response.status === 400
-              ? "credit"
-              : (`http-${response.status}` as LlmStatus);
+            : (`http-${response.status}${detail ? ` (${detail})` : ""}` as LlmStatus);
       return null;
     }
 
