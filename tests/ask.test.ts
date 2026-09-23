@@ -268,3 +268,17 @@ describe("Scout answers rather than listing", () => {
     expect(timingSentence(reportFor("a", "First Summit"))).toBeNull();
   });
 });
+
+describe("caveats that are actually caveats", () => {
+  it("does not call a pleasant reading a heads-up", () => {
+    const query = parseQuery("a hike saturday", TODAY);
+    const narrative = templateNarrative(query, [reportFor("a", "First Summit")], TODAY);
+    expect(narrative).not.toMatch(/heads-up: pleasant/i);
+  });
+
+  it("keeps proper nouns capitalised mid-sentence", () => {
+    expect(lowerFirst("Black Canyon fire 97 mi away")).toBe("Black Canyon fire 97 mi away");
+    expect(lowerFirst("Pleasantly warm at 59 °F")).toBe("pleasantly warm at 59 °F");
+    expect(lowerFirst("AQI is 48")).toBe("AQI is 48");
+  });
+});

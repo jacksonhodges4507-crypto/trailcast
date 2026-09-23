@@ -194,9 +194,13 @@ export function buildHeadline(grade: Grade, factors: Factor[], score?: number): 
  * become "aQI 142", and "12.3 h of daylight" should be left alone.
  */
 export function lowerFirst(text: string): string {
-  const first = text.split(/\s+/)[0] ?? "";
+  const words = text.split(/\s+/);
+  const first = words[0] ?? "";
   if (/^[A-Z]{2,}/.test(first)) return text;
   if (/^[\d\u2013-]/.test(first)) return text;
+  // A capitalised word followed by another capitalised word is a name, not a
+  // sentence opening: "Black Canyon fire" must not become "black Canyon fire".
+  if (/^[A-Z][a-z]/.test(first) && /^[A-Z][a-z]/.test(words[1] ?? "")) return text;
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 

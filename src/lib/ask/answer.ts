@@ -285,7 +285,11 @@ function subjectNarrative(
   const weakest = top.verdict.factors
     .filter((f): f is typeof f & { score: number } => f.score !== undefined)
     .sort((a, b) => a.score - b.score)[0];
-  if (weakest && weakest.score < 75) caveats.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+  if (weakest && weakest.score < 55) {
+    caveats.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+  } else if (weakest && weakest.score < 70) {
+    caveats.push(`The weakest part is ${weakest.label.toLowerCase()}: ${lowerFirst(weakest.reason)}.`);
+  }
 
   if (trail.dogs === "no") {
     caveats.push(`Leave the dog at home — ${lowerFirst(trail.dogsSource ?? "dogs are not allowed here")}.`);
@@ -486,11 +490,18 @@ export function templateNarrative(
   const crowd = crowdSentence(top);
   if (crowd) caveats.push(crowd);
 
-  // Always name a downside. A recommendation with no caveat is the least
-  // useful kind, even when the day genuinely is good.
+  /*
+   * Name a downside where there is one -- a recommendation with no caveat is
+   * the least useful kind. But the lowest-scoring factor is not automatically
+   * a problem: on a good day it was calling "pleasantly warm at 59-76 F" a
+   * heads-up, which is worse than saying nothing, because it teaches the
+   * reader to ignore the warnings that matter.
+   */
   const weakest = scored(top).slice().sort((a, b) => a.score - b.score)[0];
-  if (weakest && weakest.score < 75) {
+  if (weakest && weakest.score < 55) {
     caveats.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+  } else if (weakest && weakest.score < 70) {
+    caveats.push(`The weakest part of the day is ${weakest.label.toLowerCase()}: ${lowerFirst(weakest.reason)}.`);
   }
 
   const missing = top.verdict.factors.filter((f) => f.score === undefined);
