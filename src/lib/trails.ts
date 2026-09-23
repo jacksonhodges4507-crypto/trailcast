@@ -2,6 +2,7 @@ import type { Trail } from "./types";
 import { OPENBETA_AREAS } from "./data/climbingAreas";
 import { dwrTrails } from "./fishing/dwr";
 import { osmTrailList } from "./osm/trails";
+import { openbetaAreas } from "./climbing/areas";
 import { withAccessRules, withDogRules } from "./dogs";
 
 /**
@@ -693,6 +694,7 @@ export const TRAILS: Trail[] = [
   ...OPENBETA_AREAS,
   ...dwrTrails(CURATED_TRAILS),
   ...osmTrailList(CURATED_TRAILS),
+  ...openbetaAreas([...CURATED_TRAILS, ...OPENBETA_AREAS]),
 ];
 
 export const TRAILS_BY_ID: Record<string, Trail> = Object.fromEntries(

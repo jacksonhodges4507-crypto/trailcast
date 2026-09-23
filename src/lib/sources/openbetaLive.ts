@@ -1,5 +1,6 @@
 import { withCache } from "../cache";
 import { OPENBETA_IDS } from "../data/openbetaIds";
+import { isObTrail } from "../climbing/areas";
 import { getTrail } from "../trails";
 import { haversineMi } from "../geo";
 
@@ -131,13 +132,26 @@ function round(value: number): number {
   return Math.round(value * 1e5) / 1e5;
 }
 
+/**
+ * The OpenBeta area behind a place.
+ *
+ * Hand-curated crags are mapped by hand in openbetaIds.ts. Imported ones
+ * carry their own uuid, because they came from OpenBeta in the first place.
+ */
+function areaUuid(trailId: string): string | undefined {
+  const mapped = OPENBETA_IDS[trailId];
+  if (mapped) return mapped;
+  const trail = getTrail(trailId);
+  return trail && isObTrail(trail) ? trail.obUuid : undefined;
+}
+
 export function hasClimbData(trailId: string): boolean {
-  return trailId in OPENBETA_IDS;
+  return areaUuid(trailId) !== undefined;
 }
 
 /** Walls only -- light enough to draw every visible area on the map. */
 export async function wallsFor(trailId: string): Promise<Wall[]> {
-  const uuid = OPENBETA_IDS[trailId];
+  const uuid = areaUuid(trailId);
   if (!uuid) return [];
   const { value } = await withCache(`ob-walls:${uuid}`, { ttlSeconds: DAY, staleSeconds: 7 * DAY }, async () =>
     nearby(trailId, collectWalls(await query(WALL_FIELDS, uuid))).map((w) => w.wall),
@@ -182,7 +196,7 @@ async function climbTree(uuid: string): Promise<{ root: RawArea; complete: boole
 
 /** Walls and their routes, for the area someone has opened. */
 export async function climbsFor(trailId: string): Promise<ClimbData | null> {
-  const uuid = OPENBETA_IDS[trailId];
+  const uuid = areaUuid(trailId);
   if (!uuid) return null;
   const { value } = await withCache(`ob-climbs:${uuid}`, { ttlSeconds: DAY, staleSeconds: 7 * DAY }, async () => {
     const { root, complete } = await climbTree(uuid);

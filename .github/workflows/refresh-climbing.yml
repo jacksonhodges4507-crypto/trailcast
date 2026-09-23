@@ -1,0 +1,43 @@
+# Refresh the Utah climbing-area snapshot.
+#
+# The walk is a few thousand requests to OpenBeta and takes minutes, which no
+# request handler can wear -- and it needs outbound internet, which neither
+# the dev sandbox nor the deploy target reliably has. A CI runner has both, so
+# the import runs here and commits its result.
+name: Refresh climbing areas
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monthly. Crags do not appear weekly.
+    - cron: "0 9 1 * *"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Walk the Utah area tree
+        run: npx tsx scripts/import-openbeta-areas.ts
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- src/lib/data/openbetaAreas.ts; then
+            echo "No change."
+            exit 0
+          fi
+          git add src/lib/data/openbetaAreas.ts
+          git commit -m "Refresh the Utah climbing-area snapshot from OpenBeta"
+          git push
