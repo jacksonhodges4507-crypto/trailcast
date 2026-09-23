@@ -66,6 +66,15 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
   const preferSun = !preferShade && /\b(sunny|in the sun|warm(?:er)?|sun[- ]?facing)\b/.test(text);
   const wantsWater = /\b(waterfalls?|falls|lakes?|swim\w*|alpine lake)\b/.test(text);
 
+  /*
+   * Two things people ask for that a weather score cannot express: whether
+   * the dog can come, and where the leaves are. Both change the answer
+   * completely, and both were previously ignored.
+   */
+  const needsDogFriendly = /\b(dogs?|puppy|puppies|pets?|pup)\b/.test(text);
+  const wantsFallColor =
+    /\b(fall colou?rs?|autumn colou?rs?|leaves|foliage|aspens?|leaf peep\w*|colou?r)\b/.test(text);
+
   const rockMatch = text.match(/\b(sandstone|granite|limestone|quartzite|conglomerate|basalt)\b/);
   const rockType = rockMatch?.[1] as AskQuery["rockType"];
 
@@ -100,6 +109,8 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
   if (preferShade) parts.push("favouring shade");
   if (preferSun) parts.push("favouring sun");
   if (wantsWater) parts.push("with a lake or waterfall");
+  if (needsDogFriendly) parts.push("where dogs are allowed");
+  if (wantsFallColor) parts.push("for fall color");
   if (rockType) parts.push(`on ${rockType}`);
   const SPECIES_LABEL: Record<string, string> = {
     brown: "brown trout", rainbow: "rainbow trout", "bonneville-cutthroat": "cutthroat",
@@ -137,6 +148,8 @@ export function parseQuery(question: string, today: string = todayIso()): AskQue
     preferShade: preferShade || undefined,
     preferSun: preferSun || undefined,
     wantsWater: wantsWater || undefined,
+    needsDogFriendly: needsDogFriendly || undefined,
+    wantsFallColor: wantsFallColor || undefined,
     rockType,
     species,
     interpretation: parts.join(", "),

@@ -741,18 +741,32 @@ button {
 }
 
 .detail-close {
-  border: 0;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: 20px;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 600;
   line-height: 1;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(var(--shadow-rgb), 0.2);
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .detail-close:hover {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: var(--bone);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.detail-close:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .detail-body {
@@ -2415,20 +2429,39 @@ button {
   justify-content: space-between;
 }
 
+/*
+ * Close buttons have to be found before they can be pressed. A faint glyph on
+ * a faint circle reads as decoration, so these get a solid disc, a hard edge
+ * and a heavy glyph -- a reader reported hunting for them.
+ */
 .round-btn {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 600;
   line-height: 1;
-  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.18);
+  box-shadow: 0 2px 10px rgba(var(--shadow-rgb), 0.28);
   cursor: pointer;
   flex: none;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.round-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bone);
+  transform: scale(1.06);
+}
+
+.round-btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .round-btn[aria-pressed="true"] {
@@ -2508,6 +2541,11 @@ button {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 0 0 12px;
+}
+
+/* The detail panel carries a fifth tile (dogs); wrap rather than squeeze. */
+.stat-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
 }
 
 .stat-tiles > div {
@@ -3282,5 +3320,176 @@ a.climb-name:hover {
   margin: 10px 0 0;
   font-size: 11px;
   line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* ---- Dogs, and fall colour ---- */
+
+.dog-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.foliage {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text-faint);
+  background: var(--bg-elevated);
+}
+
+.foliage-peak {
+  border-left-color: var(--ember);
+}
+
+.foliage-turning,
+.foliage-fading {
+  border-left-color: var(--grade-marginal);
+}
+
+.foliage-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 5px;
+}
+
+.foliage p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.foliage-foot {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+/* ---- Through the day: the hourly strip ---- */
+
+.hours {
+  margin: 14px 0 4px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.hours-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hours-head h3 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.hours-head span {
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.hours-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.hour {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 30px;
+  flex: 1 0 auto;
+}
+
+.hour.dark {
+  opacity: 0.45;
+}
+
+.hour-temp,
+.hour-label,
+.hour-rainpct {
+  font-family: var(--font-mono-stack);
+  font-size: 9.5px;
+  line-height: 1.2;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.hour-temp {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.hour-rainpct {
+  color: #4f6b9e;
+  min-height: 11px;
+}
+
+.hour-bar-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 62px;
+}
+
+.hour-rain {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  border-radius: 3px;
+  background: rgba(79, 107, 158, 0.22);
+}
+
+.hour-bar {
+  position: relative;
+  width: 9px;
+  border-radius: 3px 3px 0 0;
+}
+
+.hours-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.hours-foot {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  line-height: 1.4;
   color: var(--text-faint);
 }

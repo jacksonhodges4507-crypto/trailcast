@@ -1,6 +1,6 @@
 import type { SourceAdapter, SourceContext, SourceResult } from "./types";
 import { asNumberArray, asRecord, asStringArray, key } from "./types";
-import type { SourceRef } from "../types";
+import type { HourPoint, SourceRef } from "../types";
 import { createBatcher, pointUrl } from "./batch";
 
 const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
@@ -106,6 +106,7 @@ export const openMeteoAdapter: SourceAdapter = {
 
     const values: SourceResult["values"] = {};
     const refs: SourceResult["refs"] = {};
+    const extras: Record<string, unknown> = {};
 
     const set = (date: string, field: string, value: number | string | undefined, upstream: string) => {
       if (value === undefined || value === null) return;
@@ -194,6 +195,8 @@ export const openMeteoAdapter: SourceAdapter = {
     const daySnow = new Map<string, number>();
     const dayStartTemp = new Map<string, number>();
     const dayCloud = new Map<string, number[]>();
+    // The whole shape of the day, for the hourly strip.
+    const dayHours = new Map<string, HourPoint[]>();
     // Pressure at a fixed hour each day, so a day-over-day trend is comparable.
     const noonPressure = new Map<string, number>();
 
@@ -228,6 +231,24 @@ export const openMeteoAdapter: SourceAdapter = {
       if (hour === 9) {
         const t = temps?.[i];
         if (t !== null && t !== undefined) dayStartTemp.set(date, t);
+      }
+
+      // The hours somebody could plausibly be out in, kept one by one.
+      if (hour >= 6 && hour <= 20) {
+        const point: HourPoint = { hour };
+        const ht = temps?.[i];
+        if (ht !== null && ht !== undefined) point.tempF = ht;
+        const hp = precipProb?.[i];
+        if (hp !== null && hp !== undefined) point.precipChancePct = hp;
+        const hw = wind?.[i];
+        if (hw !== null && hw !== undefined) point.windMph = hw;
+        const hg = gust?.[i];
+        if (hg !== null && hg !== undefined) point.gustMph = hg;
+        const hc = cloud?.[i];
+        if (hc !== null && hc !== undefined) point.cloudPct = hc;
+        const list = dayHours.get(date) ?? [];
+        list.push(point);
+        dayHours.set(date, list);
       }
 
       // Daylight-ish window: what a user is actually out in.
@@ -274,6 +295,13 @@ export const openMeteoAdapter: SourceAdapter = {
 
       const t = dayStartTemp.get(date);
       if (t !== undefined) set(date, "tempAtStartF", t, "hourly.temperature_2m@09:00");
+
+      const strip = dayHours.get(date);
+      if (strip && strip.length > 0) {
+        strip.sort((a, b) => a.hour - b.hour);
+        extras[key(date, "hours")] = strip;
+        refs[key(date, "hours")] = makeRef("hourly (06:00-20:00)");
+      }
 
       const clouds = dayCloud.get(date);
       if (clouds && clouds.length > 0) {
@@ -338,6 +366,6 @@ export const openMeteoAdapter: SourceAdapter = {
       }
     }
 
-    return { values, refs };
+    return { values, refs, extras };
   },
 };

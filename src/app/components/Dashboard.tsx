@@ -296,6 +296,17 @@ export default function Dashboard({ initial, today }: DashboardProps) {
     }
   }, [mobileView]);
 
+  /* Escape closes whatever is open, the way every other panel on the web does. */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (dexOpen) setDexOpen(false);
+      else if (sheetOpen || selectedId) closeDetail();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dexOpen, sheetOpen, selectedId, closeDetail]);
+
   const askScoutAbout = useCallback(
     (report: { trail: { name: string }; verdict: { activity: ActivityId; date: string } }) => {
       const day = relativeLabel(report.verdict.date, today);
@@ -562,6 +573,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
             reports={visible}
             selectedId={selectedId}
             onSelect={selectFromMap}
+            onDeselect={() => setSelectedId(null)}
             activity={activity}
           />
 
@@ -617,7 +629,7 @@ export default function Dashboard({ initial, today }: DashboardProps) {
                 </div>
               </div>
               <div className="peek-stats">
-                {quickStats(selected).map((stat) => (
+                {quickStats(selected).slice(0, 4).map((stat) => (
                   <div key={stat.label}>
                     <strong>{stat.value}</strong>
                     <span>{stat.label}</span>

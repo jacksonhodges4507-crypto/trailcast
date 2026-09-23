@@ -1,4 +1,4 @@
-import type { Conditions, SourceRef, WildfireSummary } from "./types";
+import type { Conditions, HourPoint, SourceRef, WildfireSummary } from "./types";
 import type { GatherResult } from "./sources";
 
 function num(values: GatherResult["values"], date: string, field: string): number | undefined {
@@ -57,8 +57,14 @@ export function assembleConditions(gathered: GatherResult, date: string): Condit
   const rawFires = extras[`${date}:wildfires`];
   const wildfires = Array.isArray(rawFires) ? (rawFires as WildfireSummary[]) : undefined;
 
+  const rawHours = extras[`${date}:hours`];
+  const hours = Array.isArray(rawHours) ? (rawHours as HourPoint[]) : undefined;
+  const hoursRef = refs[`${date}:hours`];
+  if (hoursRef) carried["hours"] = hoursRef;
+
   return {
     date,
+    hours,
     timezone: str(values, date, "timezone") ?? "UTC",
     tempMaxF: num(values, date, "tempMaxF"),
     tempMinF: num(values, date, "tempMinF"),

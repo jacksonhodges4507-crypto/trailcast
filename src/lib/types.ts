@@ -119,6 +119,23 @@ export interface Trail {
   /** DWR waters: last year stocked, and fish stocked since 2016 (a prominence proxy). */
   lastStocked?: number;
   stockedFish?: number;
+  /**
+   * Whether the route is hard-surfaced, and whether it is usable by someone
+   * in a wheelchair or pushing a stroller. "paved" is about the surface;
+   * "accessible" is a stronger claim about grade and width, so the two are
+   * separate and either can be unset.
+   */
+  paved?: boolean;
+  accessible?: "yes" | "partly" | "no";
+  /** Who says so, for the accessibility line. */
+  accessSource?: string;
+  /**
+   * Whether dogs are allowed, where a rule or a map tag says so. Left unset
+   * when nobody has checked — which the panel says, rather than guessing.
+   */
+  dogs?: "yes" | "leash" | "no";
+  /** Where the dog rule came from, so the panel can cite it. */
+  dogsSource?: string;
   /** Attribution for imported areas. */
   sourceName?: string;
   sourceUrl?: string;
@@ -126,6 +143,19 @@ export interface Trail {
 }
 
 /** Normalised environmental readings for one place and one day. */
+/** One hour of the day at a place. */
+export interface HourPoint {
+  /** Local hour, 0-23. */
+  hour: number;
+  tempF?: number;
+  /** Probability of precipitation that hour, 0-100. */
+  precipChancePct?: number;
+  windMph?: number;
+  gustMph?: number;
+  /** Cloud cover, 0-100. */
+  cloudPct?: number;
+}
+
 export interface Conditions {
   /** ISO date (YYYY-MM-DD) in the trail's local timezone. */
   date: string;
@@ -167,6 +197,13 @@ export interface Conditions {
   gaugeDistanceMi?: number;
   /** USGS identifier of the gauge used. */
   gaugeId?: string;
+  /**
+   * The day hour by hour, 06:00-20:00 local. A daily high answers "is it hot
+   * today"; someone who will be out for six hours is asking a different
+   * question -- when does the wind get up, when does the rain arrive -- and
+   * only the shape of the day answers it.
+   */
+  hours?: HourPoint[];
   /** Active wildfire perimeters within the alert radius. */
   wildfires?: WildfireSummary[];
   /** Provenance for each populated field above. */
@@ -285,6 +322,10 @@ export interface AskQuery {
   rockType?: RockType;
   /** Only waters holding this fish (a Fish Dex species id). */
   species?: string;
+  /** "Somewhere I can bring the dog" — exclude places that ban them. */
+  needsDogFriendly?: boolean;
+  /** "Where are the leaves" — rank by estimated fall colour. */
+  wantsFallColor?: boolean;
   /** A specific place the question named, when we hold one (a trail id). */
   subject?: string;
   /** Other places the name could have meant, best first (trail ids). */

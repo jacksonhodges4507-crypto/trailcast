@@ -307,8 +307,9 @@ describe("quick stats", () => {
       conditions: { tempMaxF: 63.6, windMph: 7.7 },
       verdict: { activity: "hike" },
     });
-    expect(stats.map((s) => s.value)).toEqual(["64°F", "8 mph", "—", "6.4 mi"]);
-    expect(stats.map((s) => s.label)).toEqual(["High", "Wind", "Rain", "Length"]);
+    // The fifth tile is the dog rule, which this trail has not had checked.
+    expect(stats.map((s) => s.value)).toEqual(["64°F", "8 mph", "—", "6.4 mi", "—"]);
+    expect(stats.map((s) => s.label)).toEqual(["High", "Wind", "Rain", "Length", "Dogs"]);
   });
 
   it("counts routes for climbing instead of a length", () => {

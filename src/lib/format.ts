@@ -46,7 +46,13 @@ export function formatTrip(minutes: number, miles: number): string {
 }
 
 interface StatSource {
-  trail: { distanceMi: number; sourceName?: string; routes?: number; lastStocked?: number };
+  trail: {
+    distanceMi: number;
+    sourceName?: string;
+    routes?: number;
+    lastStocked?: number;
+    dogs?: "yes" | "leash" | "no";
+  };
   conditions: { tempMaxF?: number; windMph?: number; windGustMph?: number; precipitationChancePct?: number };
   verdict: { activity: string };
 }
@@ -57,9 +63,10 @@ export interface QuickStat {
 }
 
 /**
- * The four numbers someone glances at before anything else: temperature,
- * wind, chance of rain, and how big the outing is. Missing readings show a
- * dash rather than a guess, same as everywhere else.
+ * The numbers someone glances at before anything else: temperature, wind,
+ * chance of rain, how big the outing is, and -- because it decides whether
+ * the trip happens at all -- whether the dog can come. Missing readings show
+ * a dash rather than a guess, same as everywhere else.
  */
 export function quickStats(report: StatSource): QuickStat[] {
   const { conditions, trail, verdict } = report;
@@ -81,5 +88,15 @@ export function quickStats(report: StatSource): QuickStat[] {
       label: "Rain",
     },
     size,
+    {
+      value: trail.dogs ? DOG_STAT[trail.dogs] : dash,
+      label: "Dogs",
+    },
   ];
 }
+
+const DOG_STAT: Record<"yes" | "leash" | "no", string> = {
+  yes: "OK",
+  leash: "Leash",
+  no: "No",
+};

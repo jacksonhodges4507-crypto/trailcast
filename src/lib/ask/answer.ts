@@ -5,6 +5,7 @@ import { drivePenalty } from "../travel";
 import { holdsSpecies } from "../fishing/guide";
 import type { SpeciesId } from "../fishing/species";
 import { formatDrive } from "../format";
+import { foliageFor } from "../season/foliage";
 import { readSummaries } from "../reports/service";
 import type { ReportSummary } from "../reports/kinds";
 
@@ -63,6 +64,10 @@ function applyFilters(query: AskQuery): Trail[] {
     }
     if (query.species && !holdsSpecies(trail, query.species as SpeciesId)) return false;
 
+    // "Somewhere I can bring the dog" is a hard filter, not a preference:
+    // a watershed canyon is not a near-miss, it is a ticket.
+    if (query.needsDogFriendly && trail.dogs === "no") return false;
+
     return true;
   });
 }
@@ -79,6 +84,14 @@ export const PREFERENCE_POINTS = 6;
 
 export function preferenceBonus(query: AskQuery, trail: Trail): number {
   let bonus = 0;
+  // Asked for leaves: rank by how close this place is to its own peak. Kept
+  // out of the score itself, because a trail is not safer in October.
+  if (query.wantsFallColor) {
+    const foliage = foliageFor(trail, query.date);
+    if (foliage?.rating !== undefined && foliage?.rating !== null) {
+      bonus += (foliage.rating / 100) * PREFERENCE_POINTS * 2;
+    }
+  }
   if (query.preferShade && !trail.exposed) bonus += PREFERENCE_POINTS;
   if (query.preferShade && (trail.aspect === "N" || trail.aspect === "NE" || trail.aspect === "NW")) {
     bonus += PREFERENCE_POINTS / 2;

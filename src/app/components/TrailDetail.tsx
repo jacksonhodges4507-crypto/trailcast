@@ -10,6 +10,9 @@ import Reviews from "./Reviews";
 import Directions from "./Directions";
 import ClimbRoutes from "./ClimbRoutes";
 import TrailLook from "./TrailLook";
+import HourStrip from "./HourStrip";
+import { accessSentence, dogSentence } from "@/lib/dogs";
+import { foliageFor, isFoliageSeason } from "@/lib/season/foliage";
 import type { SpeciesId } from "@/lib/fishing/species";
 import {
   GRADE_CLASS,
@@ -49,6 +52,7 @@ export default function TrailDetail({
 }: TrailDetailProps) {
   const { trail, verdict, conditions, travel } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
+  const foliage = foliageFor(trail, verdict.date);
 
   /*
    * `confidence` is the share of scoring weight that had data behind it. It
@@ -134,6 +138,37 @@ export default function TrailDetail({
               {travel.source === "estimate"
                 ? "Estimated from straight-line distance — routing was unavailable."
                 : "Free-flow road time: no traffic, closures or chain controls."}
+            </span>
+          </div>
+        ) : null}
+
+        {conditions.hours && conditions.hours.length > 0 ? (
+          <HourStrip
+            hours={conditions.hours}
+            sunrise={conditions.sunriseLocal}
+            sunset={conditions.sunsetLocal}
+          />
+        ) : null}
+
+        <p className="dog-note">
+          <span aria-hidden>{"\u{1F415}"}</span> {dogSentence(trail)}
+        </p>
+
+        {verdict.activity !== "climb" ? (
+          <p className="dog-note">
+            <span aria-hidden>{"\u{267F}"}</span> {accessSentence(trail)}
+          </p>
+        ) : null}
+
+        {foliage && isFoliageSeason(verdict.date) ? (
+          <div className={`foliage foliage-${foliage.status}`}>
+            <div className="foliage-head">
+              <span aria-hidden>{"\u{1F342}"}</span> Fall color
+            </div>
+            <p>{foliage.note}</p>
+            <span className="foliage-foot">
+              Estimated from elevation and date — color drops about 1,000 ft a week, and weather
+              moves it by a week either way.
             </span>
           </div>
         ) : null}

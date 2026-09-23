@@ -138,9 +138,18 @@ export interface MapViewProps {
   reports: TrailReport[];
   selectedId: string | null;
   onSelect: (trailId: string) => void;
+  /** Tapping the map itself puts the card away so you can look around. */
+  onDeselect?: () => void;
   /** Which activity is on screen; decides what the map draws. */
   activity?: ActivityId;
 }
+
+/*
+ * A click that landed on a wall circle also reaches the map itself. This
+ * remembers when that happened so the background handler below does not undo
+ * the selection the reader just made.
+ */
+let lastFeatureClick = 0;
 
 /** Trail and river lines, keyed by place id: each an array of [lon, lat] runs. */
 type LineIndex = Record<string, [number, number][][]>;
@@ -184,7 +193,7 @@ function tempColor(f: number): string {
   return "#a3321f";
 }
 
-export default function MapView({ reports, selectedId, onSelect, activity }: MapViewProps) {
+export default function MapView({ reports, selectedId, onSelect, onDeselect, activity }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<MapMode>("trails");
   const modeRef = useRef<MapMode>("trails");
@@ -240,6 +249,8 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
   const [failure, setFailure] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
+  const onDeselectRef = useRef(onDeselect);
+  onDeselectRef.current = onDeselect;
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -277,6 +288,16 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
         setMapReady(true);
         setZoomedOut(map.getZoom() < OVERLAY_MINZOOM);
         map.on("zoomend", () => setZoomedOut(map.getZoom() < OVERLAY_MINZOOM));
+
+        /*
+         * Tapping empty map puts the card away. Without this the only way to
+         * see the ground under the panel was to find the close button, which
+         * is not what anyone reaches for on a map.
+         */
+        map.on("click", () => {
+          if (Date.now() - lastFeatureClick < 80) return;
+          if (selectedRef.current) onDeselectRef.current?.();
+        });
 
         map.on("load", () => {
           if (cancelled) return;
@@ -605,6 +626,7 @@ export default function MapView({ reports, selectedId, onSelect, activity }: Map
           const id = features?.[0]?.properties?.id;
           // Opening an area, never closing it: a wall click is always "show me this".
           if (id && id !== selectedRef.current) onSelectRef.current(id);
+          lastFeatureClick = Date.now();
         });
         map.on("mouseenter", "tc-walls", () => {
           map.getCanvas().style.cursor = "pointer";

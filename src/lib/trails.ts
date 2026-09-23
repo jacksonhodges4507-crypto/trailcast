@@ -1,6 +1,8 @@
 import type { Trail } from "./types";
 import { OPENBETA_AREAS } from "./data/climbingAreas";
 import { dwrTrails } from "./fishing/dwr";
+import { osmTrailList } from "./osm/trails";
+import { withAccessRules, withDogRules } from "./dogs";
 
 /**
  * Seed dataset.
@@ -686,7 +688,12 @@ const CURATED_TRAILS: Trail[] = [
  * Curated places first, then imported climbing areas, then every water DWR
  * stocks (about eleven hundred). Duplicates of curated waters are dropped.
  */
-export const TRAILS: Trail[] = [...CURATED_TRAILS, ...OPENBETA_AREAS, ...dwrTrails(CURATED_TRAILS)];
+export const TRAILS: Trail[] = [
+  ...withAccessRules(withDogRules(CURATED_TRAILS)),
+  ...OPENBETA_AREAS,
+  ...dwrTrails(CURATED_TRAILS),
+  ...osmTrailList(CURATED_TRAILS),
+];
 
 export const TRAILS_BY_ID: Record<string, Trail> = Object.fromEntries(
   TRAILS.map((t) => [t.id, t]),
