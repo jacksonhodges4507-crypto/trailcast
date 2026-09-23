@@ -3605,3 +3605,56 @@ a.climb-name:hover {
     gap: 2px;
   }
 }
+
+/* ---- Scout: the reply, then the data ---- */
+
+.scout-reply p {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.scout-reply p:last-child {
+  margin-bottom: 0;
+}
+
+/* The first paragraph is the answer; give it the weight of one. */
+.scout-reply p:first-child {
+  font-size: 15.5px;
+  font-weight: 500;
+}
+
+.scout-data {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.scout-data-head {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin-bottom: 7px;
+}
+
+.pick-region {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.pick-readings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  margin-top: 3px;
+}
+
+.pick-readings em {
+  font-style: normal;
+  font-family: var(--font-mono-stack);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}

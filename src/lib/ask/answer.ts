@@ -178,6 +178,74 @@ function capitalise(text: string): string {
  * facts, so Scout is fully testable and useful with no API key at all.
  */
 /**
+ * When to be there, from the hourly readings.
+ *
+ * This is the part a score genuinely cannot express. Two days can both come
+ * out at 84 and want completely different plans: one is fine all day, the
+ * other is only fine before eleven. Nobody asks "what is the average of my
+ * Saturday" -- they ask when to leave the house, and the hour-by-hour data
+ * is already in hand, so it should be said out loud rather than left on a
+ * chart for the reader to decode.
+ */
+export function timingSentence(report: TrailReport): string | null {
+  const hours = report.conditions.hours ?? [];
+  const usable = hours.filter((h) => h.tempF !== undefined);
+  if (usable.length < 4) return null;
+
+  const label = (hour: number) =>
+    hour === 12 ? "noon" : hour < 12 ? `${hour} am` : `${hour - 12} pm`;
+
+  const notes: string[] = [];
+
+  // Rain arriving partway through is the single most actionable pattern.
+  const wet = usable.filter((h) => (h.precipChancePct ?? 0) >= 40);
+  const firstWet = wet[0];
+  if (firstWet && wet.length < usable.length) {
+    const dryBefore = usable.filter((h) => h.hour < firstWet.hour).length >= 3;
+    if (dryBefore) {
+      notes.push(
+        `rain chance climbs past ${Math.round(firstWet.precipChancePct as number)}% around ${label(firstWet.hour)}, so plan to be heading down by then`,
+      );
+    } else {
+      notes.push(`it's wet from early on, with ${Math.round(firstWet.precipChancePct as number)}% by ${label(firstWet.hour)}`);
+    }
+  }
+
+  // Heat and wind both build through the afternoon, and both are avoidable
+  // by starting earlier -- which is advice, not a reading.
+  const hottest = usable.reduce((best, h) => ((h.tempF ?? 0) > (best.tempF ?? 0) ? h : best));
+  // If the heat peaks in the same hour the rain arrives, one note covers
+  // both; naming the same hour twice reads like a machine.
+  const sameHourAsRain = firstWet !== undefined && Math.abs(hottest.hour - firstWet.hour) <= 1;
+  if ((hottest.tempF ?? 0) >= 85 && hottest.hour >= 12 && !sameHourAsRain) {
+    const morning = usable.find((h) => h.hour >= 7 && h.hour <= 9);
+    if (morning?.tempF !== undefined) {
+      notes.push(
+        `it hits ${Math.round(hottest.tempF as number)}\u00b0 around ${label(hottest.hour)} but is only ${Math.round(morning.tempF)}\u00b0 at ${label(morning.hour)}, so go early`,
+      );
+    }
+  }
+
+  const windy = usable.filter((h) => (h.windMph ?? 0) >= 18);
+  const firstWindy = windy[0];
+  const windSharesHour =
+    firstWindy !== undefined &&
+    ((firstWet !== undefined && Math.abs(firstWindy.hour - firstWet.hour) <= 1) ||
+      (notes.length > 0 && Math.abs(firstWindy.hour - hottest.hour) <= 1));
+  if (firstWindy && windy.length < usable.length && notes.length < 2 && !windSharesHour) {
+    notes.push(`wind picks up to ${Math.round(firstWindy.windMph as number)} mph from about ${label(firstWindy.hour)}`);
+  }
+
+  if (notes.length === 0) {
+    const cold = usable.find((h) => h.hour <= 9 && (h.tempF ?? 99) <= 35);
+    if (cold) return `It's ${Math.round(cold.tempF as number)}\u00b0 first thing, so the morning is the cold part rather than the problem part \u2014 the day holds steady after that.`;
+    return null;
+  }
+
+  return `On timing: ${notes.join(", and ")}.`;
+}
+
+/**
  * The answer to "what is X" / "how's X looking".
  *
  * A place the reader already has in mind does not need a recommendation; it
@@ -192,30 +260,39 @@ function subjectNarrative(
   doing: string,
 ): string {
   const trail = top.trail;
-  const sentences: string[] = [`${trail.name} is in ${trail.region}. ${trail.blurb}`];
+  const what: string[] = [`${trail.name} is in ${trail.region}. ${trail.blurb}`];
+  const how: string[] = [];
+  const caveats: string[] = [];
 
   const vetoed = top.verdict.factors.find((f) => f.veto);
   if (top.verdict.grade === "unsafe" && vetoed) {
-    sentences.push(`I wouldn't go ${when} though — ${lowerFirst(vetoed.reason)}.`);
+    how.push(`I wouldn't go ${when} though — ${lowerFirst(vetoed.reason)}.`);
   } else if (top.verdict.score !== undefined) {
-    sentences.push(
+    how.push(
       `For ${doing} ${when} it scores ${top.verdict.score} out of 100 — ${gradeLabel(top.verdict.grade).toLowerCase()}.`,
     );
     const best = top.verdict.factors
       .filter((f): f is typeof f & { score: number } => f.score !== undefined)
       .sort((a, b) => b.weight * b.score - a.weight * a.score)[0];
-    if (best) sentences.push(capitalise(lowerFirst(best.reason)) + ".");
+    if (best) how.push(capitalise(lowerFirst(best.reason)) + ".");
   } else {
-    sentences.push(`I couldn't get conditions for it ${when}, so I can't tell you how it is right now.`);
+    how.push(`I couldn't get conditions for it ${when}, so I can't tell you how it is right now.`);
   }
+
+  const timing = timingSentence(top);
+  if (timing) how.push(timing);
 
   const weakest = top.verdict.factors
     .filter((f): f is typeof f & { score: number } => f.score !== undefined)
     .sort((a, b) => a.score - b.score)[0];
-  if (weakest && weakest.score < 75) sentences.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+  if (weakest && weakest.score < 75) caveats.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+
+  if (trail.dogs === "no") {
+    caveats.push(`Leave the dog at home — ${lowerFirst(trail.dogsSource ?? "dogs are not allowed here")}.`);
+  }
 
   const crowd = crowdSentence(top);
-  if (crowd) sentences.push(crowd);
+  if (crowd) caveats.push(crowd);
 
   // Utah has four Mill Creeks. Say so rather than quietly picking one.
   const others = reports
@@ -223,12 +300,15 @@ function subjectNarrative(
     .slice(0, 2)
     .map((r) => `${r.trail.name} in ${r.trail.region}`);
   if (others.length > 0) {
-    sentences.push(
+    caveats.push(
       `If you meant a different one, I also have ${others.join(" and ")} — tap either to switch.`,
     );
   }
 
-  return sentences.join(" ");
+  return [what, how, caveats]
+    .map((group) => group.join(" ").trim())
+    .filter((group) => group.length > 0)
+    .join("\n\n");
 }
 
 export function templateNarrative(
@@ -270,7 +350,18 @@ export function templateNarrative(
     return `Don't go to ${top.trail.name} ${when}. It would otherwise be a good call, but ${lowerFirst(vetoed.reason)}.${redirect}`;
   }
 
-  const sentences: string[] = [];
+  /*
+   * The answer is written as paragraphs, not as one run-on line, because it
+   * is doing four different jobs: saying what to do, saying why, weighing it
+   * against the alternative, and being honest about what could go wrong.
+   * Readers told us it read as a summary of a place rather than a reply to
+   * their question; running those four jobs together is why.
+   */
+  const lead: string[] = [];
+  const why: string[] = [];
+  const compare: string[] = [];
+  const caveats: string[] = [];
+  const sentences = lead;
   const seed = `${top.trail.id}|${query.date}|${query.interpretation}`;
 
   const near = top.travel
@@ -308,9 +399,9 @@ export function templateNarrative(
     .sort((a, b) => b.weight - a.weight)
     .slice(0, 2);
   if (strengths.length === 2) {
-    sentences.push(`${capitalise(lowerFirst(strengths[0]!.reason))}, and ${lowerFirst(strengths[1]!.reason)}.`);
+    why.push(`${capitalise(lowerFirst(strengths[0]!.reason))}, and ${lowerFirst(strengths[1]!.reason)}.`);
   } else if (strengths.length === 1) {
-    sentences.push(`The big thing going for it: ${lowerFirst(strengths[0]!.reason)}.`);
+    why.push(`The big thing going for it: ${lowerFirst(strengths[0]!.reason)}.`);
   }
 
   /*
@@ -349,7 +440,7 @@ export function templateNarrative(
     // noticeably better day is an easy call; two hours is a real decision.
     if (extraMinutes >= 20 && margin > 0) {
       const pointsPerHour = margin / (extraMinutes / 60);
-      sentences.push(
+      compare.push(
         extraMinutes < 45
           ? `It's ${margin} points better than ${runnerUp.trail.name} for ${formatDrive(extraMinutes)} more each way, which is an easy trade.`
           : pointsPerHour >= 8
@@ -357,46 +448,62 @@ export function templateNarrative(
             : `It's ${margin} points better than ${runnerUp.trail.name} but ${formatDrive(extraMinutes)} further each way, so it's worth it if the day is the point, not if you're short on time.`,
       );
     } else if (extraMinutes <= -20) {
-      sentences.push(
+      compare.push(
         `It also beats ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) on the drive, by ${formatDrive(-extraMinutes)} each way.`,
       );
     } else if (margin <= 3) {
-      sentences.push(
+      compare.push(
         `${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is basically just as good, so go with whichever is easier for you to get to.`,
       );
     } else if (widest && widest.gap > 2 && widest.better && widest.worse) {
-      sentences.push(
+      compare.push(
         `If that doesn't work, ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is the backup; it loses mostly on ${widest.label}, ${widest.worse} against ${widest.better}.`,
       );
     } else {
-      sentences.push(`If that doesn't work, ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is a solid backup.`);
+      compare.push(`If that doesn't work, ${runnerUp.trail.name} (${runnerUp.verdict.score ?? "?"}) is a solid backup.`);
     }
   }
 
   if (query.preferShade && !top.trail.exposed) {
-    sentences.push("It's one of the shadier options too, like you asked.");
+    why.push("It's one of the shadier options too, like you asked.");
   } else if (query.preferShade && top.trail.exposed) {
-    sentences.push("It's more exposed than you wanted, but the conditions gap made up for it.");
+    why.push("It's more exposed than you wanted, but the conditions gap made up for it.");
   }
 
+  if (query.needsDogFriendly) {
+    caveats.push(
+      top.trail.dogs === "leash"
+        ? "Dogs are fine here on a leash, which is why it's top of the list."
+        : "Everything I'm suggesting allows dogs — the watershed canyons are out for that reason.",
+    );
+  }
+
+  // When to be there. The score is a number for the whole day; this is the
+  // part of the answer somebody actually acts on.
+  const timing = timingSentence(top);
+  if (timing) caveats.push(timing);
+
   const crowd = crowdSentence(top);
-  if (crowd) sentences.push(crowd);
+  if (crowd) caveats.push(crowd);
 
   // Always name a downside. A recommendation with no caveat is the least
   // useful kind, even when the day genuinely is good.
   const weakest = scored(top).slice().sort((a, b) => a.score - b.score)[0];
   if (weakest && weakest.score < 75) {
-    sentences.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
+    caveats.push(`One heads-up: ${lowerFirst(weakest.reason)}.`);
   }
 
   const missing = top.verdict.factors.filter((f) => f.score === undefined);
   if (missing.length > 0) {
-    sentences.push(
+    caveats.push(
       `I don't have ${missing.map((f) => f.label.toLowerCase()).join(" or ")} data for it, so I can't vouch for that part.`,
     );
   }
 
-  return sentences.join(" ");
+  return [lead, why, compare, caveats]
+    .map((group) => group.join(" ").trim())
+    .filter((group) => group.length > 0)
+    .join("\n\n");
 }
 
 /**

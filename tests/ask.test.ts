@@ -5,6 +5,7 @@ import {
   radiusFor,
   rankByProximity,
   templateNarrative,
+  timingSentence,
 } from "@/lib/ask/answer";
 import { lowerFirst, scoreTrail } from "@/lib/scoring";
 import { goodConditions, trail } from "./fixtures";
@@ -222,5 +223,48 @@ describe("narrative polish", () => {
     expect(lowerFirst("AQI 142 is unhealthy")).toBe("AQI 142 is unhealthy");
     expect(lowerFirst("Dry and firm dirt")).toBe("dry and firm dirt");
     expect(lowerFirst("12.3 h of daylight")).toBe("12.3 h of daylight");
+  });
+});
+
+describe("Scout answers rather than listing", () => {
+  const hours = [
+    { hour: 7, tempF: 52, precipChancePct: 5, windMph: 4 },
+    { hour: 9, tempF: 63, precipChancePct: 5, windMph: 6 },
+    { hour: 11, tempF: 78, precipChancePct: 10, windMph: 9 },
+    { hour: 13, tempF: 88, precipChancePct: 30, windMph: 14 },
+    { hour: 15, tempF: 91, precipChancePct: 60, windMph: 21 },
+  ];
+
+  const withHours = (report: TrailReport): TrailReport => ({
+    ...report,
+    conditions: { ...report.conditions, hours },
+  });
+
+  it("writes paragraphs, not one run-on line", () => {
+    const query = parseQuery("a hike saturday", TODAY);
+    const narrative = templateNarrative(
+      query,
+      [withHours(reportFor("a", "First Summit")), withHours(reportFor("b", "Second Summit", goodConditions({ tempMaxF: 82 })))],
+      TODAY,
+    );
+    expect(narrative.split(/\n{2,}/).length).toBeGreaterThan(2);
+  });
+
+  it("says when to be there, which no score can", () => {
+    const query = parseQuery("a hike saturday", TODAY);
+    const narrative = templateNarrative(query, [withHours(reportFor("a", "First Summit"))], TODAY);
+    expect(narrative).toMatch(/On timing:/);
+    expect(narrative).toMatch(/3 pm/);
+  });
+
+  it("does not name the same hour twice", () => {
+    const report = withHours(reportFor("a", "First Summit"));
+    const line = timingSentence(report) ?? "";
+    const threes = line.match(/3 pm/g) ?? [];
+    expect(threes.length).toBeLessThan(2);
+  });
+
+  it("says nothing about timing when there is no hourly data", () => {
+    expect(timingSentence(reportFor("a", "First Summit"))).toBeNull();
   });
 });

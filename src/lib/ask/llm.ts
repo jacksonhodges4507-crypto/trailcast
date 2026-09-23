@@ -153,6 +153,16 @@ export async function narrate(
     driveMinutesOneWay: report.travel?.minutes ?? null,
     driveIsEstimate: report.travel ? report.travel.source === "estimate" : null,
     blurb: report.trail.blurb,
+    dogs: report.trail.dogs ?? null,
+    // The shape of the day, so timing advice is grounded rather than invented.
+    hourly: (report.conditions.hours ?? [])
+      .filter((h) => h.tempF !== undefined)
+      .map((h) => ({
+        hour: h.hour,
+        tempF: Math.round(h.tempF as number),
+        rainChancePct: h.precipChancePct ?? null,
+        windMph: h.windMph !== undefined ? Math.round(h.windMph) : null,
+      })),
     vetoes: report.verdict.factors
       .filter((f) => f.veto)
       .map((f) => `${f.label}: ${f.reason}`),
@@ -187,9 +197,26 @@ export async function narrate(
     "Your job is the comparison the ranking cannot express: why the top",
     "option beats the next one, and what would change that.",
     "",
+    "The reader sees the ranked places, their scores and their readings as",
+    "cards directly BELOW your text. So do not summarise those cards. Your",
+    "job is the reasoning a card cannot carry: what you would actually do,",
+    "why, what you weighed it against, and when to be there.",
+    "",
+    "Shape: three short paragraphs, separated by a blank line.",
+    "  1. Answer the question that was asked, in a sentence or two. If they",
+    "     asked where to go, name one place and commit to it.",
+    "  2. Why that one, and what it beats. Name the factor that separates it",
+    "     from the runner-up, with both readings.",
+    "  3. When to be there and what could go wrong. Use the hourly shape if",
+    "     one is supplied: 'go early, it hits 91 by two' is the sentence a",
+    "     score cannot give them.",
+    "",
     "Rules:",
-    "- 2-4 conversational sentences. Prose only: no bullets, headings or preamble.",
-    "- Lead with the recommendation, then why, in plain words.",
+    "- Prose only: no bullets, headings, markdown or preamble.",
+    "- Never open with 'Based on' or restate the question back at them.",
+    "- Never end with a list of the places and their scores; the cards below",
+    "  already do that, and repeating it is what makes you sound like a",
+    "  search result instead of an answer.",
     "- Use ONLY the supplied facts. Never invent a place, number or condition.",
     "- Cite at least two specific readings, in their own units, verbatim.",
     "- Name the single factor that separates the top two options.",
@@ -244,8 +271,8 @@ export async function narrate(
   return call({
     system: [system, ...subjectRules].join("\n"),
     user,
-    maxTokens: 600,
-    timeoutMs: 14000,
+    maxTokens: 700,
+    timeoutMs: 16000,
   });
 }
 

@@ -56,6 +56,15 @@ export interface AskBarProps {
  * Scout: TrailCast's assistant. Say what you want to do; Scout works out
  * where and when, and shows its top picks as cards you can open.
  */
+/** The three readings worth showing on a card, straight from the verdict. */
+function readings(report: { verdict: { factors: { label: string; display?: string; score?: number; weight: number }[] } }): string[] {
+  return report.verdict.factors
+    .filter((f): f is typeof f & { display: string } => Boolean(f.display) && f.score !== undefined)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 3)
+    .map((f) => `${f.label}: ${f.display}`);
+}
+
 export default function AskBar({ onAnswer, coords, onShowMap, onPick, prefill }: AskBarProps) {
   const [question, setQuestion] = useState("");
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
@@ -164,30 +173,55 @@ export default function AskBar({ onAnswer, coords, onShowMap, onPick, prefill }:
 
       {answer && !error && !busy ? (
         <div className="answer">
-          <p>{answer.narrative}</p>
+          {/*
+            The reply comes first and the data comes last. Readers said Scout
+            "just gives a location": it was handing back a ranked list with a
+            sentence on top, which reads as a search result rather than an
+            answer to what they asked.
+          */}
+          <div className="scout-reply">
+            {answer.narrative.split(/\n{2,}/).map((para, index) => (
+              <p key={index}>{para}</p>
+            ))}
+          </div>
 
           {answer.results.length > 0 ? (
-            <ul className="scout-picks">
-              {answer.results.slice(0, 3).map((r) => (
-                <li key={r.trail.id}>
-                  <button type="button" onClick={() => onPick?.(r.trail.id)}>
-                    <span className="pick-score" style={{ background: GRADE_COLOR[r.verdict.grade] }}>
-                      {r.verdict.score ?? "–"}
-                    </span>
-                    <span className="pick-body">
-                      <strong>{r.trail.name}</strong>
-                      <span>{r.verdict.headline}</span>
-                    </span>
-                    {r.travel ? <span className="pick-drive">{formatDrive(r.travel.minutes)}</span> : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="scout-data">
+              <div className="scout-data-head">
+                {answer.results.length === 1
+                  ? "The place, and what I'm going on"
+                  : "The places, and what I'm going on"}
+              </div>
+              <ul className="scout-picks">
+                {answer.results.slice(0, 3).map((r) => (
+                  <li key={r.trail.id}>
+                    <button type="button" onClick={() => onPick?.(r.trail.id)}>
+                      <span className="pick-score" style={{ background: GRADE_COLOR[r.verdict.grade] }}>
+                        {r.verdict.score ?? "–"}
+                      </span>
+                      <span className="pick-body">
+                        <strong>{r.trail.name}</strong>
+                        <span className="pick-region">{r.trail.region}</span>
+                        <span>{r.verdict.headline}</span>
+                        <span className="pick-readings">
+                          {readings(r).map((reading) => (
+                            <em key={reading}>{reading}</em>
+                          ))}
+                        </span>
+                      </span>
+                      {r.travel ? <span className="pick-drive">{formatDrive(r.travel.minutes)}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
 
           <p className="meta">
             Scout read this as: {answer.query.interpretation}
-            {answer.narratedBy === "llm" ? " · written by the language model from these scores" : ""}
+            {answer.narratedBy === "llm"
+              ? " · written by the language model from these scores"
+              : " · written from the scoring engine, with no model key set"}
           </p>
 
           {onShowMap && answer.results.length > 0 ? (
