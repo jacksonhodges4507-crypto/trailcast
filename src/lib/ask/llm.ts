@@ -6,6 +6,14 @@ import { PLACES } from "./places";
 const API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-sonnet-4-5";
 
+/** The configured model, treating blank and whitespace as unset. */
+function modelName(): string {
+  return (process.env["ANTHROPIC_MODEL"] ?? "").trim() || DEFAULT_MODEL;
+}
+
+/** Test seam for the blank-env-var case that cost an afternoon. */
+export const modelForTests = modelName;
+
 export function isLlmEnabled(): boolean {
   return Boolean(process.env["ANTHROPIC_API_KEY"]);
 }
@@ -69,7 +77,12 @@ async function call(options: CallOptions): Promise<string | null> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: process.env["ANTHROPIC_MODEL"] ?? DEFAULT_MODEL,
+        // An env var set to an empty string is not an unset env var, and `??`
+        // only catches the second. A blank ANTHROPIC_MODEL was being sent
+        // verbatim, and the API rejected every request with "model: String
+        // should have at least 1 character" -- which, before the status field
+        // existed, looked exactly like having no key at all.
+        model: modelName(),
         max_tokens: options.maxTokens,
         system: options.system,
         messages: [{ role: "user", content: options.user }],

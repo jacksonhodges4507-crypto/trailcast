@@ -282,3 +282,22 @@ describe("caveats that are actually caveats", () => {
     expect(lowerFirst("AQI is 48")).toBe("AQI is 48");
   });
 });
+
+describe("model configuration", () => {
+  it("treats a blank ANTHROPIC_MODEL as unset", async () => {
+    const { modelForTests } = await import("@/lib/ask/llm");
+    const before = process.env["ANTHROPIC_MODEL"];
+
+    process.env["ANTHROPIC_MODEL"] = "";
+    expect(modelForTests()).toBe("claude-sonnet-4-5");
+
+    process.env["ANTHROPIC_MODEL"] = "   ";
+    expect(modelForTests()).toBe("claude-sonnet-4-5");
+
+    process.env["ANTHROPIC_MODEL"] = "claude-opus-4-1";
+    expect(modelForTests()).toBe("claude-opus-4-1");
+
+    if (before === undefined) delete process.env["ANTHROPIC_MODEL"];
+    else process.env["ANTHROPIC_MODEL"] = before;
+  });
+});
