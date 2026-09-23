@@ -40,4 +40,13 @@ jobs:
           fi
           git add src/lib/data/openbetaAreas.ts
           git commit -m "Refresh the Utah climbing-area snapshot from OpenBeta"
-          git push
+          # The walk takes several minutes, which is long enough for someone
+          # to land a commit while it runs -- and it did, the first time. Rebase
+          # onto whatever arrived rather than failing after doing all the work.
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin main && git push && exit 0
+            echo "Push attempt $attempt lost a race; retrying."
+            sleep 5
+          done
+          echo "Could not push after three attempts."
+          exit 1
