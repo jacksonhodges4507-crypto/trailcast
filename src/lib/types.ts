@@ -242,6 +242,14 @@ export interface Factor {
   missingReason?: string;
   /** Hard stop: if true the whole verdict is forced to "unsafe". */
   veto?: boolean;
+  /**
+   * Computed, but not worth a reader's attention right now, so it is dropped
+   * from the panel and from the score entirely rather than shown as a
+   * reassuring zero. A fire ninety miles away with clean air is the case
+   * this exists for: it is not information, it is an alarm bell with nothing
+   * behind it.
+   */
+  hidden?: boolean;
   sources: SourceRef[];
 }
 

@@ -753,6 +753,7 @@ export const wildfireRule: Rule = ({ conditions }) => {
       label: "Wildfire",
       score: 100,
       weight: 0,
+      hidden: true,
       display: "none within 100 mi",
       reason: "No active fires within 100 miles",
       sources: collect(conditions, ["wildfires"]),
@@ -765,6 +766,32 @@ export const wildfireRule: Rule = ({ conditions }) => {
   }
 
   const distance = nearest.distanceMi;
+
+  /*
+   * Only say it when it changes what you'd do.
+   *
+   * A fire ninety miles away with clean air is not information, it is an
+   * alarm bell with nothing behind it -- and a panel that cries fire on a
+   * blue-sky day teaches the reader to ignore it on the day it matters.
+   * Close enough for closures, or close enough that the air has actually
+   * gone off, and it is said plainly. Otherwise it is dropped, and the air
+   * quality factor carries the smoke on its own, which is what a reader can
+   * act on anyway.
+   */
+  const CLOSE_ENOUGH_MI = 30;
+  const smoky = aqi !== undefined && aqi > 100;
+  if (distance > CLOSE_ENOUGH_MI && !smoky) {
+    return {
+      id: "wildfire",
+      label: "Wildfire",
+      score: 95,
+      weight: 0,
+      hidden: true,
+      display: `${distance.toFixed(0)} mi away`,
+      reason: `${nearest.name} fire is ${distance.toFixed(0)} mi away and the air is clear`,
+      sources: collect(conditions, ["wildfires", "usAqi"]),
+    };
+  }
 
   let score: number;
   if (distance <= 5) score = 0;
@@ -783,7 +810,7 @@ export const wildfireRule: Rule = ({ conditions }) => {
     // The cross-factor sentence is the point of reading these together.
     reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; with AQI at ${Math.round(aqi)}, its smoke is likely what you are breathing`;
   } else if (aqi !== undefined) {
-    reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; air is clean for now (AQI ${Math.round(aqi)}), but that can change with the wind`;
+    reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; the air is still clean (AQI ${Math.round(aqi)}), but check for closures before you drive`;
   } else {
     reason = `${nearest.name} fire ${distance.toFixed(0)} mi away${acres}${others}; smoke possible depending on wind`;
   }

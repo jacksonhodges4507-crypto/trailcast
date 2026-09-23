@@ -53,6 +53,11 @@ export default function TrailDetail({
   const { trail, verdict, conditions, travel } = report;
   const activityLabel = ACTIVITIES[verdict.activity].label.toLowerCase();
   const foliage = foliageFor(trail, verdict.date);
+  // Matches the wildfire rule's threshold: close enough for closures, or
+  // close enough that the air has actually gone off.
+  const nearbyFires = (conditions.wildfires ?? []).filter(
+    (fire) => fire.distanceMi <= 30 || (conditions.usAqi !== undefined && conditions.usAqi > 100),
+  ).slice(0, 4);
 
   /*
    * `confidence` is the share of scoring weight that had data behind it. It
@@ -240,15 +245,25 @@ export default function TrailDetail({
 
         <UserReports trailId={trail.id} activity={verdict.activity} />
 
-        {conditions.wildfires && conditions.wildfires.length > 0 ? (
+        {/*
+          Fires are listed only when one is close enough to change the plan.
+          A blue-sky day with a fire ninety miles off was showing a panel
+          headed "Active fires within 100 mi", which reads as a warning and
+          is not one -- and a warning shown on a clear day is a warning
+          nobody reads on a smoky one.
+        */}
+        {nearbyFires.length > 0 ? (
           <div className="sources">
-            <h3>Active fires within 100 mi</h3>
-            {conditions.wildfires.slice(0, 4).map((fire) => (
+            <h3>Fires close enough to matter</h3>
+            {nearbyFires.map((fire) => (
               <div className="source-item" key={`${fire.name}-${fire.distanceMi}`}>
                 {fire.name} — {fire.distanceMi} mi
                 {fire.acres !== undefined ? ` · ${fire.acres.toLocaleString()} ac` : ""}
               </div>
             ))}
+            <div className="source-item">
+              Check the land manager for closures before you drive.
+            </div>
           </div>
         ) : null}
 

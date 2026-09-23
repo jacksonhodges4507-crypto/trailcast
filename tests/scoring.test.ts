@@ -28,7 +28,10 @@ describe("scoreTrail on a clear autumn day", () => {
   });
 
   it("scores every factor the activity profile asked for", () => {
-    expect(verdict.factors).toHaveLength(7);
+    // Six, not seven: on a clear day with no fire in range the wildfire
+    // factor is hidden rather than shown as a reassuring zero.
+    expect(verdict.factors).toHaveLength(6);
+    expect(verdict.factors.some((f) => f.id === "wildfire")).toBe(false);
     for (const factor of verdict.factors) {
       expect(factor.score).toBeDefined();
       expect(factor.missingReason).toBeUndefined();
@@ -597,14 +600,26 @@ describe("unit rendering", () => {
 describe("wildfire at range", () => {
   const fire = (distanceMi: number) => [{ name: "Test Ridge", distanceMi, acres: 4000 }];
 
-  it("counts a fire 90 miles out, gently", () => {
+  it("does not raise an alarm about a fire 90 miles out on a clear day", () => {
     const factor = wildfireRule({
       trail: trail(),
       conditions: goodConditions({ wildfires: fire(90) }),
       activity: "hike",
     });
-    expect(factor.score ?? 0).toBeGreaterThan(80);
+    // A warning shown on a blue-sky day is a warning nobody reads on a
+    // smoky one, so it is dropped rather than softened.
+    expect(factor.hidden).toBe(true);
     expect(factor.veto).toBeFalsy();
+  });
+
+  it("shows a fire once it is close enough for closures", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(20), usAqi: 32 }),
+      activity: "hike",
+    });
+    expect(factor.hidden).toBeFalsy();
+    expect(factor.reason).toContain("check for closures");
   });
 
   it("blames a fire in range when the air is actually bad", () => {
@@ -616,13 +631,22 @@ describe("wildfire at range", () => {
     expect(factor.reason).toContain("smoke is likely what you are breathing");
   });
 
-  it("says the air is clean when a distant fire is not reaching you", () => {
+  it("keeps a distant fire out of the panel when the air is fine", () => {
     const factor = wildfireRule({
       trail: trail(),
       conditions: goodConditions({ wildfires: fire(60), usAqi: 32 }),
       activity: "hike",
     });
-    expect(factor.reason).toContain("air is clean for now");
+    expect(factor.hidden).toBe(true);
+  });
+
+  it("brings a distant fire back the moment the air goes off", () => {
+    const factor = wildfireRule({
+      trail: trail(),
+      conditions: goodConditions({ wildfires: fire(60), usAqi: 160 }),
+      activity: "hike",
+    });
+    expect(factor.hidden).toBeFalsy();
   });
 
   it("still vetoes a fire on the doorstep", () => {

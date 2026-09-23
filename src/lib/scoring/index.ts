@@ -82,9 +82,13 @@ export function scoreTrail(
     const configuredWeight = profile.weights[factorId] ?? 0;
     if (configuredWeight === 0) continue;
 
-    weightAll += configuredWeight;
-
     const factor = rule({ trail, conditions, activity });
+
+    // A hidden factor is not a zero-weight factor: it never existed as far
+    // as this verdict is concerned, so it must not dilute the weights either.
+    if (factor.hidden) continue;
+
+    weightAll += configuredWeight;
     factor.weight = configuredWeight;
 
     if (factor.score !== undefined) {
