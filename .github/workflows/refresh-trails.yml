@@ -1,0 +1,50 @@
+# Refresh the statewide trail snapshot.
+#
+# Overpass refuses cloud IP ranges often enough to be unusable from a deploy
+# target, and the elevation pass is a few hundred more requests on top. A CI
+# runner has the internet and the write access, so the import runs here and
+# commits its own result.
+name: Refresh trails
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Quarterly. Trails change on the scale of years.
+    - cron: "0 10 1 */3 *"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Measure Utah's named trail routes
+        run: npx tsx scripts/import-osm-trails.ts
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- src/lib/data/osmTrails.ts; then
+            echo "No change."
+            exit 0
+          fi
+          git add src/lib/data/osmTrails.ts
+          git commit -m "Refresh the statewide trail snapshot from OpenStreetMap"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin main && git push && exit 0
+            echo "Push attempt $attempt lost a race; retrying."
+            sleep 5
+          done
+          echo "Could not push after three attempts."
+          exit 1
