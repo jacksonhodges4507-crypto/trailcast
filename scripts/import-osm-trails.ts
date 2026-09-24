@@ -1,295 +1,163 @@
 /**
- * Refresh the statewide trail snapshot from OpenStreetMap.
+ * Build the statewide trail snapshot from an OpenStreetMap extract.
  *
- *   npx tsx scripts/import-osm-trails.ts
+ *   osmium tags-filter utah.osm.pbf r/route=hiking r/route=foot \
+ *     r/route=mtb r/route=bicycle -R -o routes.osm.pbf
+ *   osmium cat routes.osm.pbf -f osm -o routes.osm
+ *   npx tsx scripts/import-osm-trails.ts routes.osm
  *
- * Utah's named trail routes -- the curated multi-way relations that people
- * actually name and search for -- with their real length and elevation gain
- * measured from geometry rather than guessed.
+ * See .github/workflows/refresh-trails.yml, which does all of that.
  *
- * Why OSM and not a search engine: OSM's geometry is openly licensed and
- * redistributable, so the length, the trailhead and the shape are facts we
- * can carry. A search engine's trail descriptions are not.
+ * This used to query the Overpass API, tile by tile, and it was the wrong
+ * tool for the job. Overpass is built for interactive questions about small
+ * areas, not for bulk extraction of a whole state, and it says so by
+ * refusing: across three attempts it managed two tiles out of nine in
+ * twenty-seven minutes, and by the end it was returning a gateway timeout in
+ * eight seconds flat to every query regardless of size -- a statewide one
+ * and a two-degree one alike. That is a server shedding load, and no amount
+ * of client tuning fixes it. Three rounds of tuning is the evidence.
  *
- * Why this runs in CI: Overpass refuses cloud IP ranges, and the dev sandbox
- * has no route to it at all.
- *
- * Three things were learned the expensive way and are now load-bearing:
- *
- *   1. `[route~"^(hiking|foot|mtb)$"]` forces a full scan and times out. A
- *      union of exact `["route"="hiking"]` matches uses the tag index and
- *      returns the same rows in about two seconds.
- *   2. Utah in one query is too much for a public endpoint no matter how the
- *      filter is written. The state is walked as tiles.
- *   3. A 504 from Overpass usually means "busy", not "wrong". Every failure
- *      here is retried with a real backoff before the tile is split, because
- *      the first version treated a busy server as an empty state and wrote
- *      down that Utah has no trails.
+ * Geofabrik publishes the same data as a 161 MB file, rebuilt daily. One
+ * download, no rate limit, no slot protocol, no refusals, and the same
+ * answer every time -- which is what a scheduled job that nobody watches
+ * actually needs. osmium reduces it to the few megabytes of route relations
+ * in one pass; this script reads that.
  */
-import { writeFileSync } from "node:fs";
+import { createReadStream, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 
-const MIRRORS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-];
 const ELEVATION = "https://api.open-meteo.com/v1/elevation";
 
-/** Utah, with a little margin. */
-const STATE = { south: 36.98, west: -114.07, north: 42.02, east: -109.03 };
-
-/**
- * A tile this wide is one Overpass query; ones that fail get quartered.
- *
- * Two degrees, because listing is tags-only and cheap: a 2-degree box over
- * the Uintas answers in twenty seconds with 120 routes. That is nine
- * requests for the state instead of thirty-six, and when the server is busy
- * enough to refuse one, the split turns it back into the 1-degree boxes that
- * are known to work. Start optimistic, degrade on evidence.
- */
-const TILE_DEGREES = 2;
-/** Stop splitting here; below this a tile is smaller than a trailhead. */
-const MIN_TILE_DEGREES = 0.125;
-
-/** A courtesy pause between queries, on top of the slot wait below. */
-const POLITE_MS = 1_500;
-/**
- * Waits after a refusal. Short, because a refusal here is transient load
- * shedding rather than a rate limit -- the slot check above already handles
- * the rate limit, and sitting out a minute for a server that will answer in
- * ten seconds was most of why the first attempt could not finish.
- */
-const BACKOFF_MS = [10_000, 25_000, 45_000];
-/** How many times a request is retried before the caller gives up on it. */
-const ATTEMPTS = 3;
-
-/** Relations per geometry request. Small, so one monster is cheap to isolate. */
-const GEOMETRY_BATCH = 8;
-
-/** A name that sounds like somewhere you walk or ride, not a road number. */
-const TRAILISH = /\b(trail|parkway|path|greenway|loop|rail|route|traverse)\b/i;
+/** Utah, with a little margin. The extract already is Utah; this is a guard. */
+const STATE = { south: 36.9, west: -114.2, north: 42.1, east: -108.9 };
 
 const MIN_MI = 0.4;
 const MAX_MI = 60;
 
-interface Member {
-  type?: string;
-  geometry?: { lat: number; lon: number }[];
-}
-interface Relation {
-  id: number;
-  tags?: Record<string, string>;
-  members?: Member[];
-}
-interface Box {
-  south: number;
-  west: number;
-  north: number;
-  east: number;
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Tags only: cheap, and it always answers. */
-function listQuery(box: Box): string {
-  const b = `${box.south},${box.west},${box.north},${box.east}`;
-  // Exact matches, not a regex: see note 1 at the top of this file.
-  const clauses = ["hiking", "foot", "mtb", "bicycle"]
-    .map((route) => `relation(${b})["route"="${route}"]["name"];`)
-    .join("");
-  return `[out:json][timeout:180];(${clauses});out tags center;`;
-}
+/** A name that sounds like somewhere you walk or ride, not a road number. */
+const TRAILISH = /\b(trail|parkway|path|greenway|loop|rail|route|traverse)\b/i;
 
 /**
- * Geometry for a named handful of relations.
- *
- * `out body geom` and not `out geom tags`, which is what this said for most
- * of a day. Overpass reads the first word as verbosity, and `tags` means id
- * and tags ONLY -- no members. The request returned 200, returned every
- * relation, returned their names, and returned not one coordinate. Every
- * route then measured zero length, every route was dropped for being under
- * the minimum, and the import would have walked the whole state to write an
- * empty file.
- *
- * It only surfaced because a 2,000-mile trail came back in three kilobytes.
- * A response being suspiciously small is a result worth reading twice.
- */
-function geometryQuery(ids: number[]): string {
-  return `[out:json][timeout:180];relation(id:${ids.join(",")});out body geom;`;
-}
-
-let queriesMade = 0;
-let slotWaitsMs = 0;
-
-/**
- * Wait until the server says it will take another query.
- *
- * Overpass runs a slot system -- two concurrent queries per client on the
- * main instance -- and publishes the state at /api/status, including how
- * many seconds until the next slot frees. The first version of this importer
- * ignored that and fired on a timer, which exhausted the budget, turned
- * every subsequent query into a refusal, and then paid a blind 20-75 second
- * penalty for each one. It managed two tiles of thirty-six in twenty-six
- * minutes.
- *
- * Asking is both faster and better manners: the server is telling us exactly
- * when it is ready, and there is no reason to guess instead.
- */
-async function waitForSlot(mirror: string): Promise<void> {
-  const origin = mirror.replace(/\/api\/interpreter$/, "");
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
-    const response = await fetch(`${origin}/api/status`, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!response.ok) return;
-
-    const text = await response.text();
-    if (/\bslots? available now/i.test(text)) return;
-
-    // "Slot available after: <time>, in 31 seconds." -- possibly several,
-    // one per slot. The soonest is the one worth waiting for.
-    const waits = [...text.matchAll(/in (\d+) seconds/g)].map((m) => Number(m[1]));
-    if (waits.length > 0) {
-      const seconds = Math.min(...waits);
-      if (Number.isFinite(seconds) && seconds > 0) {
-        const ms = Math.min(seconds + 2, 180) * 1000;
-        slotWaitsMs += ms;
-        console.log(`  waiting ${Math.round(ms / 1000)}s for a slot`);
-        await sleep(ms);
-      }
-    }
-  } catch {
-    // The status endpoint is advisory. If it is unreachable, carry on and
-    // let the request itself tell us.
-  }
-}
-
-/** One Overpass request. Null means refused or unreachable, not empty. */
-async function ask(overpassQl: string, mirror: string): Promise<Relation[] | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120_000);
-  try {
-    const response = await fetch(mirror, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        // Overpass asks that automated clients identify themselves.
-        "user-agent": "trailcast-importer (github.com/jacksonhodges4507-crypto/trailcast)",
-      },
-      body: `data=${encodeURIComponent(overpassQl)}`,
-    });
-    queriesMade += 1;
-    if (!response.ok) return null;
-    const body = (await response.json()) as { elements?: Relation[] };
-    return body.elements ?? [];
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function quarter(box: Box): Box[] {
-  const midLat = (box.south + box.north) / 2;
-  const midLon = (box.west + box.east) / 2;
-  return [
-    { south: box.south, west: box.west, north: midLat, east: midLon },
-    { south: box.south, west: midLon, north: midLat, east: box.east },
-    { south: midLat, west: box.west, north: box.north, east: midLon },
-    { south: midLat, west: midLon, north: box.north, east: box.east },
-  ];
-}
-
-/**
- * Ask a mirror for something, patiently.
- *
- * Null means every attempt was refused. The caller decides whether that is
- * worth splitting up or worth skipping -- the distinction matters, because
- * the two failures here have opposite cures.
- */
-async function fetchWithRetry(body: string, label: string): Promise<Relation[] | null> {
-  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-    const mirror = MIRRORS[(requestsStarted + attempt) % MIRRORS.length]!;
-    await waitForSlot(mirror);
-    requestsStarted += 1;
-
-    const elements = await ask(body, mirror);
-    if (elements !== null) {
-      await sleep(POLITE_MS);
-      return elements;
-    }
-    const pause = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]!;
-    console.log(`  ${label} refused; waiting ${pause / 1000}s`);
-    await sleep(pause);
-  }
-  return null;
-}
-
-/**
- * Geometry for a set of relations, a few at a time.
- *
- * This exists because of one measurement. The tile covering Kanab kept being
- * refused while the server reported free slots, so it was never rate
- * limiting -- it was the query being genuinely too expensive. Asking that
- * tile for tags alone answered in eleven seconds and explained itself: the
- * Arizona Trail, the Great Western Trail and two sections of the Hayduke,
- * each hundreds of miles of geometry, all inside the box.
- *
- * The importer was downloading every one of them and then discarding them
- * for being over the 60-mile cap. So geometry is now fetched only for routes
- * that might survive that cap, in small batches, and a batch that fails is
- * halved until the offender is alone and can be skipped by itself. One
- * monster costs one wasted request instead of poisoning a sixth of the
- * state.
- */
-async function geometryFor(ids: number[], depth = 0): Promise<Relation[]> {
-  if (ids.length === 0) return [];
-
-  const found = await fetchWithRetry(geometryQuery(ids), `geometry x${ids.length}`);
-  if (found !== null) return found;
-
-  if (ids.length === 1) {
-    console.warn(`  !! skipping relation ${ids[0]}: too large to fetch`);
-    skippedRelations += 1;
-    return [];
-  }
-
-  const half = Math.ceil(ids.length / 2);
-  const left = await geometryFor(ids.slice(0, half), depth + 1);
-  const right = await geometryFor(ids.slice(half), depth + 1);
-  return [...left, ...right];
-}
-
-/**
- * Networks that are long-distance by definition. An international or
- * national walking route is never a day out, and it is never under the
- * distance cap, so there is no reason to pay for its geometry to find out.
+ * Networks that are long-distance by definition. The Arizona Trail and the
+ * Great Western cross Utah and are never a day out.
  */
 const THROUGH_NETWORKS = new Set(["iwn", "nwn"]);
 
-/** Every candidate route relation in a tile, listed cheaply. */
-async function listTile(box: Box, span: number): Promise<Relation[]> {
-  const label = `tile ${box.south},${box.west}`;
-  const listed = await fetchWithRetry(listQuery(box), label);
-  if (listed !== null) return listed;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  if (span / 2 < MIN_TILE_DEGREES) {
-    console.warn(`  !! giving up on ${label} (${span}deg)`);
-    failedTiles += 1;
-    return [];
-  }
-
-  console.log(`  splitting ${label}`);
-  const out: Relation[] = [];
-  for (const sub of quarter(box)) out.push(...(await listTile(sub, span / 2)));
-  return out;
+/** XML attribute, from osmium's very regular output. */
+function attr(line: string, name: string): string | undefined {
+  const match = line.match(new RegExp(`${name}="([^"]*)"`));
+  return match?.[1];
 }
 
-let failedTiles = 0;
-let requestsStarted = 0;
-let skippedRelations = 0;
+function decode(text: string): string {
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+interface ParsedRelation {
+  id: number;
+  tags: Record<string, string>;
+  wayIds: number[];
+}
+
+interface Extract {
+  nodes: Map<number, [number, number]>;
+  ways: Map<number, number[]>;
+  relations: ParsedRelation[];
+}
+
+/**
+ * Read the filtered extract.
+ *
+ * osmium writes nodes, then ways, then relations, one element per line, so a
+ * line-at-a-time reader is enough and never holds the file in memory. The
+ * extract carries only what the route relations reference, so the maps stay
+ * small.
+ */
+async function readExtract(path: string): Promise<Extract> {
+  const nodes = new Map<number, [number, number]>();
+  const ways = new Map<number, number[]>();
+  const relations: ParsedRelation[] = [];
+
+  let wayId: number | null = null;
+  let wayNodes: number[] = [];
+  let relId: number | null = null;
+  let relTags: Record<string, string> = {};
+  let relWays: number[] = [];
+
+  const reader = createInterface({
+    input: createReadStream(path, { encoding: "utf8" }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const raw of reader) {
+    const line = raw.trim();
+
+    if (line.startsWith("<node")) {
+      const id = Number(attr(line, "id"));
+      const lat = Number(attr(line, "lat"));
+      const lon = Number(attr(line, "lon"));
+      if (Number.isFinite(id) && Number.isFinite(lat) && Number.isFinite(lon)) {
+        nodes.set(id, [lon, lat]);
+      }
+      continue;
+    }
+
+    if (line.startsWith("<way")) {
+      wayId = Number(attr(line, "id"));
+      wayNodes = [];
+      if (line.endsWith("/>")) {
+        if (Number.isFinite(wayId)) ways.set(wayId, []);
+        wayId = null;
+      }
+      continue;
+    }
+    if (wayId !== null && line.startsWith("<nd")) {
+      const ref = Number(attr(line, "ref"));
+      if (Number.isFinite(ref)) wayNodes.push(ref);
+      continue;
+    }
+    if (wayId !== null && line.startsWith("</way")) {
+      ways.set(wayId, wayNodes);
+      wayId = null;
+      continue;
+    }
+
+    if (line.startsWith("<relation")) {
+      relId = Number(attr(line, "id"));
+      relTags = {};
+      relWays = [];
+      if (line.endsWith("/>")) relId = null;
+      continue;
+    }
+    if (relId !== null && line.startsWith("<member")) {
+      if (attr(line, "type") === "way") {
+        const ref = Number(attr(line, "ref"));
+        if (Number.isFinite(ref)) relWays.push(ref);
+      }
+      continue;
+    }
+    if (relId !== null && line.startsWith("<tag")) {
+      const k = attr(line, "k");
+      const v = attr(line, "v");
+      if (k !== undefined && v !== undefined) relTags[k] = decode(v);
+      continue;
+    }
+    if (relId !== null && line.startsWith("</relation")) {
+      relations.push({ id: relId, tags: relTags, wayIds: relWays });
+      relId = null;
+      continue;
+    }
+  }
+
+  return { nodes, ways, relations };
+}
 
 const R = 6_371_000;
 function metres(a: [number, number], b: [number, number]): number {
@@ -345,114 +213,62 @@ async function elevations(points: [number, number][]): Promise<(number | null)[]
   }
 }
 
+interface Built {
+  id: number;
+  name: string;
+  mask: number;
+  lat: number;
+  lon: number;
+  miles: number;
+  gainFt: number;
+  elevationFt: number;
+  surface: string;
+  samples: [number, number][];
+}
+
 async function main() {
-  const tiles: Box[] = [];
-  for (let lat = STATE.south; lat < STATE.north; lat += TILE_DEGREES) {
-    for (let lon = STATE.west; lon < STATE.east; lon += TILE_DEGREES) {
-      tiles.push({
-        south: Math.round(lat * 1e4) / 1e4,
-        west: Math.round(lon * 1e4) / 1e4,
-        north: Math.round(Math.min(lat + TILE_DEGREES, STATE.north) * 1e4) / 1e4,
-        east: Math.round(Math.min(lon + TILE_DEGREES, STATE.east) * 1e4) / 1e4,
-      });
-    }
-  }
-  console.log(`Walking Utah as ${tiles.length} tiles…`);
+  const path = process.argv[2];
+  if (!path) throw new Error("Usage: tsx scripts/import-osm-trails.ts <routes.osm>");
 
-  // Pass one: what is out there. Tags only, so this stays cheap and does not
-  // choke on the through-routes.
-  const candidates = new Map<number, Relation>();
-  let throughRoutes = 0;
-  for (const [index, tile] of tiles.entries()) {
-    const listed = await listTile(tile, TILE_DEGREES);
-    let kept = 0;
-    for (const relation of listed) {
-      const tags = relation.tags ?? {};
-      const name = clean(tags["name"] ?? "");
-      if (!name || name.length > 60) continue;
-      if (THROUGH_NETWORKS.has(tags["network"] ?? "")) {
-        throughRoutes += 1;
-        continue;
-      }
-      if (/^(US|UT|SR|I)[- ]?\d/i.test(name)) continue;
-      if (tags["route"] === "bicycle" && !TRAILISH.test(name)) continue;
-      // Routes straddle tile borders and come back from each; id dedupes.
-      candidates.set(relation.id, relation);
-      kept += 1;
-    }
-    console.log(`tile ${index + 1}/${tiles.length} → ${kept} candidates, ${candidates.size} total`);
-  }
-
-  if (candidates.size === 0) {
-    throw new Error(
-      `Overpass listed nothing across ${tiles.length} tiles and ${queriesMade} queries. ` +
-        "Refusing to overwrite the snapshot with an empty one.",
-    );
-  }
+  console.log(`Reading ${path}…`);
+  const { nodes, ways, relations } = await readExtract(path);
   console.log(
-    `${candidates.size} candidates (${throughRoutes} through-routes skipped unfetched). ` +
-      "Fetching geometry…",
+    `${relations.length} relations, ${ways.size} ways, ${nodes.size} nodes in the extract.`,
   );
-
-  // Pass two: geometry, only for what might survive the distance cap.
-  const ids = [...candidates.keys()];
-  const seen = new Map<number, Relation>();
-  let checkedFirstBatch = false;
-  for (let i = 0; i < ids.length; i += GEOMETRY_BATCH) {
-    const batch = ids.slice(i, i + GEOMETRY_BATCH);
-    const got = await geometryFor(batch);
-    for (const relation of got) seen.set(relation.id, relation);
-
-    // Fail on the first batch, not after walking the whole state. A wrong
-    // `out` spec returns 200, returns every relation, returns their names,
-    // and returns no coordinates at all -- which looks like success right up
-    // until the file is empty an hour later.
-    if (!checkedFirstBatch && got.length > 0) {
-      checkedFirstBatch = true;
-      const withGeometry = got.filter((relation) =>
-        (relation.members ?? []).some((m) => m.geometry && m.geometry.length > 1),
-      );
-      if (withGeometry.length === 0) {
-        throw new Error(
-          `Fetched ${got.length} relations and not one carried geometry. ` +
-            "The Overpass `out` spec is wrong -- it needs `out body geom`, since " +
-            "`out tags` returns no members.",
-        );
-      }
-    }
-
-    console.log(`geometry ${Math.min(i + GEOMETRY_BATCH, ids.length)}/${ids.length}`);
+  if (relations.length === 0) {
+    throw new Error("The extract holds no relations. The osmium filter produced nothing.");
   }
 
-  if (seen.size === 0) {
-    throw new Error("Listed routes but could fetch no geometry. Refusing to write an empty snapshot.");
-  }
-
-  interface Built {
-    id: number;
-    name: string;
-    mask: number;
-    lat: number;
-    lon: number;
-    miles: number;
-    gainFt: number;
-    elevationFt: number;
-    surface: string;
-    samples: [number, number][];
-  }
   const built: Built[] = [];
+  let throughRoutes = 0;
+  let noGeometry = 0;
 
-  for (const relation of seen.values()) {
-    const tags = relation.tags ?? {};
+  for (const relation of relations) {
+    const tags = relation.tags;
     const name = clean(tags["name"] ?? "");
     if (!name || name.length > 60) continue;
+    if (THROUGH_NETWORKS.has(tags["network"] ?? "")) {
+      throughRoutes += 1;
+      continue;
+    }
     if (/^(US|UT|SR|I)[- ]?\d/i.test(name)) continue;
     if (tags["route"] === "bicycle" && !TRAILISH.test(name)) continue;
 
-    const segments = (relation.members ?? [])
-      .filter((m) => m.type === "way" && m.geometry && m.geometry.length > 1)
-      .map((m) => m.geometry!.map((g) => [g.lon, g.lat] as [number, number]));
-    if (segments.length === 0) continue;
+    const segments: [number, number][][] = [];
+    for (const id of relation.wayIds) {
+      const refs = ways.get(id);
+      if (!refs || refs.length < 2) continue;
+      const points: [number, number][] = [];
+      for (const ref of refs) {
+        const point = nodes.get(ref);
+        if (point) points.push(point);
+      }
+      if (points.length > 1) segments.push(points);
+    }
+    if (segments.length === 0) {
+      noGeometry += 1;
+      continue;
+    }
 
     let length = 0;
     for (const segment of segments) {
@@ -463,7 +279,6 @@ async function main() {
 
     const flat = segments.flat();
     const start = flat[0]!;
-    // Tiles overlap the state border; keep only what is actually in Utah.
     if (start[1] < STATE.south || start[1] > STATE.north) continue;
     if (start[0] < STATE.west || start[0] > STATE.east) continue;
 
@@ -487,22 +302,31 @@ async function main() {
     });
   }
 
-  console.log(`Sampling elevation for ${built.length} routes…`);
-  for (const route of built) {
+  console.log(
+    `${built.length} trails kept (${throughRoutes} through-routes, ` +
+      `${noGeometry} without usable geometry).`,
+  );
+  if (built.length === 0) {
+    throw new Error("Read the extract but kept no trails. Refusing to write an empty snapshot.");
+  }
+
+  console.log("Sampling elevation…");
+  for (const [index, route] of built.entries()) {
     const heights = await elevations(route.samples);
     const known = heights.filter((h): h is number => h !== null);
-    if (known.length < 2) continue;
-
-    let gain = 0;
-    for (let i = 1; i < heights.length; i += 1) {
-      const a = heights[i - 1];
-      const b = heights[i];
-      if (a === null || a === undefined || b === null || b === undefined) continue;
-      if (b > a) gain += b - a;
+    if (known.length >= 2) {
+      let gain = 0;
+      for (let i = 1; i < heights.length; i += 1) {
+        const a = heights[i - 1];
+        const b = heights[i];
+        if (a === null || a === undefined || b === null || b === undefined) continue;
+        if (b > a) gain += b - a;
+      }
+      route.elevationFt = Math.round((known[0] ?? 0) * 3.28084);
+      route.gainFt = Math.round(gain * 3.28084);
     }
-    route.elevationFt = Math.round((known[0] ?? 0) * 3.28084);
-    route.gainFt = Math.round(gain * 3.28084);
-    await sleep(250);
+    if (index % 100 === 0) console.log(`  elevation ${index}/${built.length}`);
+    await sleep(200);
   }
 
   built.sort((a, b) => a.name.localeCompare(b.name));
@@ -538,12 +362,7 @@ export type OsmTrailRow = [
 export const OSM_TRAILS: OsmTrailRow[] = ${JSON.stringify(rows)};
 `,
   );
-  console.log(
-    `Wrote ${rows.length} trails from ${seen.size} relations ` +
-      `(${queriesMade} queries, ${Math.round(slotWaitsMs / 1000)}s waiting for slots, ` +
-      `${skippedRelations} relations too large to fetch).`,
-  );
-  if (failedTiles > 0) console.warn(`${failedTiles} tiles could not be read.`);
+  console.log(`Wrote ${rows.length} trails.`);
 }
 
 void main();

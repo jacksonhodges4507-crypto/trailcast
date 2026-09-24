@@ -1,9 +1,14 @@
-# Refresh the statewide trail snapshot.
+# Refresh the statewide trail snapshot from OpenStreetMap.
 #
-# Overpass refuses cloud IP ranges often enough to be unusable from a deploy
-# target, and the elevation pass is a few hundred more requests on top. A CI
-# runner has the internet and the write access, so the import runs here and
-# commits its own result.
+# Geofabrik rebuilds a Utah extract daily -- 161 MB, the whole state, no rate
+# limit and no slot protocol. osmium reduces it to the route relations in one
+# pass, and the import script reads that.
+#
+# This replaced a tile-by-tile Overpass crawl that could not finish. Overpass
+# is built for interactive questions about small areas; asked for a whole
+# state it refuses, and it refused a two-degree box and a statewide one alike
+# in eight seconds flat. A scheduled job nobody watches needs the answer to
+# be the same every time, which is what a static download gives.
 name: Refresh trails
 
 on:
@@ -18,7 +23,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -28,8 +33,31 @@ jobs:
 
       - run: npm install --no-audit --no-fund
 
-      - name: Measure Utah's named trail routes
-        run: npx tsx scripts/import-osm-trails.ts
+      - name: Install osmium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          osmium --version
+
+      - name: Download the Utah extract
+        run: |
+          curl -sSL --retry 3 --retry-delay 5 \
+            -o utah.osm.pbf \
+            https://download.geofabrik.de/north-america/us/utah-latest.osm.pbf
+          ls -lh utah.osm.pbf
+
+      - name: Reduce it to route relations
+        run: |
+          # -R pulls in the ways and nodes those relations reference, which is
+          # what turns a list of relations into something with geometry.
+          osmium tags-filter utah.osm.pbf \
+            r/route=hiking r/route=foot r/route=mtb r/route=bicycle \
+            -R -o routes.osm.pbf
+          osmium cat routes.osm.pbf -f osm -o routes.osm
+          ls -lh routes.osm.pbf routes.osm
+
+      - name: Build the snapshot
+        run: npx tsx scripts/import-osm-trails.ts routes.osm
 
       - name: Commit if anything changed
         run: |
