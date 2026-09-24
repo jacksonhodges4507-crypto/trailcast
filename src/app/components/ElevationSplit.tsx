@@ -33,6 +33,11 @@ export default function ElevationSplit({
     value === undefined ? "—" : `${Math.round(value)} mph`;
   const feet = (value: number) => `${Math.round(value).toLocaleString()} ft`;
 
+  // Two wind figures only when the ridge estimate actually differs. When it
+  // does not, one figure covers both ends -- printing the same number twice
+  // would claim a summit reading that was never obtained.
+  const splitWind = summit.windMph !== undefined;
+
   const gap =
     summit.coolerByF !== undefined && Math.abs(summit.coolerByF) >= 3
       ? summit.inverted
@@ -48,7 +53,9 @@ export default function ElevationSplit({
           <span className="elev-split-elev">{feet(trail.elevationFt)}</span>
           <strong>{temp(conditions.tempMaxF)}</strong>
           <span className="elev-split-low">low {temp(conditions.tempMinF)}</span>
-          <span className="elev-split-wind">{wind(conditions.windMph)}</span>
+          {splitWind ? (
+            <span className="elev-split-wind">{wind(conditions.windMph)}</span>
+          ) : null}
         </div>
         <div className="elev-split-rise" aria-hidden>
           <span>↗</span>
@@ -59,24 +66,31 @@ export default function ElevationSplit({
           <span className="elev-split-elev">{feet(summit.elevationFt)}</span>
           <strong>{temp(summit.tempMaxF)}</strong>
           <span className="elev-split-low">low {temp(summit.tempMinF)}</span>
-          <span className="elev-split-wind">{wind(summit.windMph)}</span>
+          {splitWind ? <span className="elev-split-wind">{wind(summit.windMph)}</span> : null}
         </div>
       </div>
 
       {gap ? <p className="elev-split-note">{gap}</p> : null}
 
-      {conditions.precipitationChancePct !== undefined ? (
-        <p className="elev-split-shared">
-          Rain {Math.round(conditions.precipitationChancePct)}% — the forecast does not separate
-          precipitation by elevation here, so this is the figure for the whole canyon.
-        </p>
-      ) : null}
+      <p className="elev-split-shared">
+        {!splitWind && conditions.windMph !== undefined
+          ? `Wind ${Math.round(conditions.windMph)} mph. `
+          : ""}
+        {conditions.precipitationChancePct !== undefined
+          ? `Rain ${Math.round(conditions.precipitationChancePct)}%. `
+          : ""}
+        {!splitWind || conditions.precipitationChancePct !== undefined
+          ? "The forecast does not separate these by elevation today, so they cover the whole canyon."
+          : ""}
+      </p>
 
       <p className="elev-split-foot">
         Summit temperature is the trailhead forecast shifted by the measured difference between
-        those two heights; summit wind is the free-air wind at ridge level, which is what a
-        mountain forecast reads. Both are estimates for the top of the route, not a reading taken
-        there.
+        those two heights.{" "}
+        {splitWind
+          ? "Summit wind is the free-air wind at ridge level, which is what a mountain forecast reads. "
+          : ""}
+        An estimate for the top of the route, not a reading taken there.
       </p>
     </section>
   );

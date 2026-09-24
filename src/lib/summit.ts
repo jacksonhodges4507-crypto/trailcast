@@ -43,7 +43,12 @@ export interface SummitConditions {
   gainFt: number;
   tempMaxF?: number;
   tempMinF?: number;
-  /** Free-air wind at ridge height, mph. */
+  /**
+   * Free-air wind at ridge height, mph -- set only when it genuinely comes
+   * in above the trailhead. Undefined means "no better number than the one
+   * already shown", which the panel renders as a single shared figure rather
+   * than the same value printed twice.
+   */
   windMph?: number;
   /** How much colder the top is at its warmest, F. Positive means colder. */
   coolerByF?: number;
@@ -56,6 +61,12 @@ export interface SummitConditions {
  * for. A lakeshore and a 200 ft roll are the same day at both ends.
  */
 const MIN_GAIN_FT = 800;
+
+/**
+ * How much stronger the ridge estimate must be before it is worth stating
+ * separately. Under this it is noise wearing a second number's clothes.
+ */
+const RIDGE_WIND_MARGIN_MPH = 2;
 
 /** Linear interpolation through the profile, extrapolating past the ends. */
 function atHeight(
@@ -125,13 +136,21 @@ export function summitFor(trail: Trail, conditions: Conditions): SummitCondition
   }
 
   const ridgeWind = atHeight(profile, topFt, (l) => l.windMph);
+  const surfaceWind = conditions.windMph;
   if (ridgeWind !== undefined) {
-    // A ridge is not more sheltered than the canyon under it. Where the
-    // free-air value comes in under the surface wind the model is telling us
-    // about the air above the ridge, not the ridge, so the valley reading is
-    // the better floor.
-    const floor = conditions.windMph ?? 0;
-    result.windMph = Math.max(ridgeWind, floor);
+    // A ridge is not more sheltered than the canyon under it, so a ridge
+    // value below the surface wind is not a finding -- it is the model
+    // describing air the mountain is not in.
+    //
+    // The first version clamped those up to the surface wind, which put the
+    // identical number in both columns and read as "we worked out the summit
+    // wind and it happens to match". It had not. Below the margin there is
+    // nothing to add, so nothing is claimed, and the panel shows one wind
+    // figure covering both ends -- the same treatment precipitation gets,
+    // for the same reason.
+    if (surfaceWind === undefined || ridgeWind >= surfaceWind + RIDGE_WIND_MARGIN_MPH) {
+      result.windMph = ridgeWind;
+    }
   }
 
   return result;

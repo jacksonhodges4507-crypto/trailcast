@@ -152,6 +152,34 @@ describe("summit conditions", () => {
     expect(summit.tempMaxF!).toBeGreaterThan(25);
   });
 
+  it("claims no summit wind at all when the ridge is not windier", () => {
+    // Not the trailhead figure repeated. An earlier version clamped the
+    // ridge value up to the surface wind, which put the same number in both
+    // columns and read as a summit reading that matched -- it was not one.
+    const sheltered = {
+      levels: [
+        { hPa: 850, heightFt: 5000, tempF: 60, windMph: 1 },
+        { hPa: 700, heightFt: 10400, tempF: 40, windMph: 2 },
+      ],
+    };
+    const summit = summitFor(trail(6000, 4000), base({ profile: sheltered, windMph: 12 }))!;
+    expect(summit.windMph).toBeUndefined();
+    // The temperature difference is still real and still reported.
+    expect(summit.tempMaxF).toBeLessThan(70);
+  });
+
+  it("ignores a ridge value only marginally above the valley", () => {
+    const marginal = {
+      levels: [
+        { hPa: 850, heightFt: 5000, tempF: 60, windMph: 10 },
+        { hPa: 700, heightFt: 10400, tempF: 40, windMph: 13 },
+      ],
+    };
+    // Interpolates to about 12.6 against a surface 12: inside the margin.
+    const summit = summitFor(trail(6000, 4000), base({ profile: marginal, windMph: 12 }))!;
+    expect(summit.windMph).toBeUndefined();
+  });
+
   it("never reports the ridge as calmer than the canyon", () => {
     const sheltered = {
       levels: [
@@ -160,9 +188,10 @@ describe("summit conditions", () => {
       ],
     };
     // This is the failure the whole design is built around: asked directly,
-    // the model puts less wind on the summit than the trailhead.
+    // the model puts less wind on the summit than the trailhead. Whatever is
+    // reported, it is never a number below the valley's.
     const summit = summitFor(trail(6000, 4000), base({ profile: sheltered, windMph: 12 }))!;
-    expect(summit.windMph).toBeGreaterThanOrEqual(12);
+    expect(summit.windMph === undefined || summit.windMph >= 12).toBe(true);
   });
 
   it("carries ridge wind through when it is the stronger of the two", () => {
