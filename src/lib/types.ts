@@ -156,6 +156,23 @@ export interface HourPoint {
   cloudPct?: number;
 }
 
+/**
+ * The air column over a place, at the pressure levels a mountain forecast is
+ * actually read from. Heights are geopotential, so they move with the weather
+ * rather than sitting at a textbook altitude.
+ */
+export interface AirProfile {
+  levels: {
+    /** Pressure level, hPa. 850 sits near 5,000 ft, 700 near 10,400. */
+    hPa: number;
+    heightFt: number;
+    /** Mean free-air temperature across daylight hours, F. */
+    tempF?: number;
+    /** Strongest free-air wind across daylight hours, mph. */
+    windMph?: number;
+  }[];
+}
+
 export interface Conditions {
   /** ISO date (YYYY-MM-DD) in the trail's local timezone. */
   date: string;
@@ -206,6 +223,11 @@ export interface Conditions {
   hours?: HourPoint[];
   /** Active wildfire perimeters within the alert radius. */
   wildfires?: WildfireSummary[];
+  /**
+   * The air column above this point. Used to say what the top of a climb is
+   * like without pretending a second forecast was fetched for the summit.
+   */
+  profile?: AirProfile;
   /** Provenance for each populated field above. */
   refs: Record<string, SourceRef>;
 }

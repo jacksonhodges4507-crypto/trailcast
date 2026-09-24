@@ -16,6 +16,23 @@ const HOURLY = [
   "cloud_cover",
 ] as const;
 
+/**
+ * Pressure levels, for what the air is doing above the trailhead.
+ *
+ * 850 hPa sits near 5,000 ft, 700 near 10,400 and 600 near 14,500, so these
+ * three bracket every Utah trailhead and summit including Kings Peak. They
+ * cost no extra request -- they ride along in the one already being made for
+ * this grid cell -- and unlike a fixed lapse rate they show an inversion the
+ * right way round.
+ */
+const LEVELS_HPA = [850, 700, 600] as const;
+
+const PRESSURE_HOURLY = LEVELS_HPA.flatMap((hPa) => [
+  `temperature_${hPa}hPa`,
+  `wind_speed_${hPa}hPa`,
+  `geopotential_height_${hPa}hPa`,
+]);
+
 const DAILY = [
   "temperature_2m_max",
   "temperature_2m_min",
@@ -26,7 +43,7 @@ const DAILY = [
 ] as const;
 
 const PARAMS: Record<string, string> = {
-  hourly: HOURLY.join(","),
+  hourly: [...HOURLY, ...PRESSURE_HOURLY].join(","),
   daily: DAILY.join(","),
   timezone: "auto",
   temperature_unit: "fahrenheit",
@@ -200,6 +217,28 @@ export const openMeteoAdapter: SourceAdapter = {
     // Pressure at a fixed hour each day, so a day-over-day trend is comparable.
     const noonPressure = new Map<string, number>();
 
+    // The air column, gathered over daylight hours: mean height and
+    // temperature, strongest wind. Mean temperature because the summit
+    // difference should describe the day rather than one hour of it;
+    // strongest wind because that is the one worth knowing about.
+    const levelSeries = LEVELS_HPA.map((hPa) => ({
+      hPa,
+      height: asNumberArray(hourly?.[`geopotential_height_${hPa}hPa`]),
+      temp: asNumberArray(hourly?.[`temperature_${hPa}hPa`]),
+      wind: asNumberArray(hourly?.[`wind_speed_${hPa}hPa`]),
+    }));
+    const heightUnit =
+      typeof hourlyUnits[`geopotential_height_${LEVELS_HPA[0]}hPa`] === "string"
+        ? (hourlyUnits[`geopotential_height_${LEVELS_HPA[0]}hPa`] as string)
+        : "m";
+    const toFeet = (value: number) => (heightUnit === "ft" ? value : value * 3.28084);
+    interface LevelBucket {
+      heights: number[];
+      temps: number[];
+      windMax: number;
+    }
+    const dayProfile = new Map<string, Map<number, LevelBucket>>();
+
     // Rolling 72-hour precipitation totals ending at each date's midnight.
     const hourlyPrecipByTs: { ts: number; inches: number }[] = [];
 
@@ -272,6 +311,20 @@ export const openMeteoAdapter: SourceAdapter = {
           bucket.push(cc);
           dayCloud.set(date, bucket);
         }
+
+        const byLevel = dayProfile.get(date) ?? new Map<number, LevelBucket>();
+        for (const level of levelSeries) {
+          const height = level.height?.[i];
+          if (height === null || height === undefined) continue;
+          const bucket = byLevel.get(level.hPa) ?? { heights: [], temps: [], windMax: 0 };
+          bucket.heights.push(toFeet(height));
+          const lt = level.temp?.[i];
+          if (lt !== null && lt !== undefined) bucket.temps.push(lt);
+          const lw = level.wind?.[i];
+          if (lw !== null && lw !== undefined) bucket.windMax = Math.max(bucket.windMax, lw);
+          byLevel.set(level.hPa, bucket);
+        }
+        dayProfile.set(date, byLevel);
       }
 
       const s = snow?.[i];
@@ -301,6 +354,31 @@ export const openMeteoAdapter: SourceAdapter = {
         strip.sort((a, b) => a.hour - b.hour);
         extras[key(date, "hours")] = strip;
         refs[key(date, "hours")] = makeRef("hourly (06:00-20:00)");
+      }
+
+      const byLevel = dayProfile.get(date);
+      if (byLevel && byLevel.size >= 2) {
+        const levels = LEVELS_HPA.map((hPa) => {
+          const bucket = byLevel.get(hPa);
+          if (!bucket || bucket.heights.length === 0) return null;
+          const mean = (list: number[]) => list.reduce((sum, v) => sum + v, 0) / list.length;
+          const level: {
+            hPa: number;
+            heightFt: number;
+            tempF?: number;
+            windMph?: number;
+          } = { hPa, heightFt: mean(bucket.heights) };
+          if (bucket.temps.length > 0) level.tempF = mean(bucket.temps);
+          if (bucket.windMax > 0) level.windMph = bucket.windMax;
+          return level;
+        }).filter((level) => level !== null);
+
+        if (levels.length >= 2) {
+          extras[key(date, "profile")] = { levels };
+          refs[key(date, "profile")] = makeRef(
+            `hourly.${LEVELS_HPA.map((h) => `${h}hPa`).join("/")} (daytime)`,
+          );
+        }
       }
 
       const clouds = dayCloud.get(date);
