@@ -3,6 +3,7 @@ import { TRAILS, getTrail } from "@/lib/trails";
 import { accessSentence, dogSentence } from "@/lib/dogs";
 import { foliageFor, isFoliageSeason, peakDayOfYear } from "@/lib/season/foliage";
 import { summitFor } from "@/lib/summit";
+import { quickStats } from "@/lib/format";
 import { parseQuery } from "@/lib/ask/parse";
 import { ask } from "@/lib/ask/answer";
 import { quickStats } from "@/lib/format";
@@ -177,5 +178,36 @@ describe("summit conditions", () => {
 
   it("needs a profile to say anything", () => {
     expect(summitFor(trail(6000, 4000), base({ profile: undefined }))).toBeNull();
+  });
+});
+
+describe("stat tiles only claim what is known", () => {
+  const conditions = {
+    date: "2026-09-25",
+    timezone: "America/Denver",
+    tempMaxF: 70,
+    windMph: 6,
+    precipitationChancePct: 10,
+    refs: {},
+  };
+
+  it("drops the Dogs tile when nobody has recorded a rule", () => {
+    const trail = { ...getTrail("lake-blanche")!, dogs: undefined };
+    const labels = quickStats({
+      trail,
+      conditions,
+      verdict: { activity: "hike", date: "2026-09-25" },
+    } as never).map((s) => s.label);
+    expect(labels).not.toContain("Dogs");
+  });
+
+  it("keeps it when there is one", () => {
+    const trail = { ...getTrail("lake-blanche")!, dogs: "no" as const };
+    const tiles = quickStats({
+      trail,
+      conditions,
+      verdict: { activity: "hike", date: "2026-09-25" },
+    } as never);
+    expect(tiles.find((s) => s.label === "Dogs")?.value).toBe("No");
   });
 });

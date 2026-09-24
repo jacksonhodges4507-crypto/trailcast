@@ -307,9 +307,12 @@ describe("quick stats", () => {
       conditions: { tempMaxF: 63.6, windMph: 7.7 },
       verdict: { activity: "hike" },
     });
-    // The fifth tile is the dog rule, which this trail has not had checked.
-    expect(stats.map((s) => s.value)).toEqual(["64°F", "8 mph", "—", "6.4 mi", "—"]);
-    expect(stats.map((s) => s.label)).toEqual(["High", "Wind", "Rain", "Length", "Dogs"]);
+    // Rain dashes because a source we expected did not answer -- worth
+    // showing. There is no Dogs tile at all, because no dog rule has ever
+    // been recorded for this trail and a tile whose only content is its own
+    // absence is clutter.
+    expect(stats.map((s) => s.value)).toEqual(["64°F", "8 mph", "—", "6.4 mi"]);
+    expect(stats.map((s) => s.label)).toEqual(["High", "Wind", "Rain", "Length"]);
   });
 
   it("counts routes for climbing instead of a length", () => {

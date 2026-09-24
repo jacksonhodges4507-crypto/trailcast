@@ -80,7 +80,7 @@ export function quickStats(report: StatSource): QuickStat[] {
           ? { value: dash, label: "Length" }
         : { value: `${trail.distanceMi} mi`, label: verdict.activity === "fish" ? "Access" : "Length" };
 
-  return [
+  const tiles: QuickStat[] = [
     { value: conditions.tempMaxF !== undefined ? `${Math.round(conditions.tempMaxF)}°F` : dash, label: "High" },
     { value: conditions.windMph !== undefined ? `${Math.round(conditions.windMph)} mph` : dash, label: "Wind" },
     {
@@ -88,11 +88,17 @@ export function quickStats(report: StatSource): QuickStat[] {
       label: "Rain",
     },
     size,
-    {
-      value: trail.dogs ? DOG_STAT[trail.dogs] : dash,
-      label: "Dogs",
-    },
   ];
+
+  // A dash under "Dogs" is not the same kind of blank as a dash under "Wind".
+  // A missing wind figure means a source we expected did not answer, which is
+  // worth showing. A missing dog rule means nobody has ever recorded one for
+  // this place, and a tile that exists only to say so is clutter -- most of
+  // all on the southern trails, where half the panel was turning into
+  // categories reporting their own absence.
+  if (trail.dogs) tiles.push({ value: DOG_STAT[trail.dogs], label: "Dogs" });
+
+  return tiles;
 }
 
 const DOG_STAT: Record<"yes" | "leash" | "no", string> = {
