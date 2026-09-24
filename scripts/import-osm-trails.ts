@@ -43,10 +43,12 @@ const TILE_DEGREES = 1;
 /** Stop splitting here; below this a tile is smaller than a trailhead. */
 const MIN_TILE_DEGREES = 0.125;
 
-/** Between successful queries. Overpass allows two slots; this stays under. */
-const POLITE_MS = 8_000;
-/** After a refusal, in order. */
-const BACKOFF_MS = [20_000, 45_000, 75_000];
+/** A courtesy pause between queries, on top of the slot wait below. */
+const POLITE_MS = 1_500;
+/** Fallback waits, only for a mirror that publishes no slot status. */
+const BACKOFF_MS = [15_000, 30_000, 60_000];
+/** How many times a tile is retried before it is split. */
+const ATTEMPTS = 4;
 
 const MIN_MI = 0.4;
 const MAX_MI = 60;
@@ -79,6 +81,51 @@ function query(box: Box): string {
 }
 
 let queriesMade = 0;
+let slotWaitsMs = 0;
+
+/**
+ * Wait until the server says it will take another query.
+ *
+ * Overpass runs a slot system -- two concurrent queries per client on the
+ * main instance -- and publishes the state at /api/status, including how
+ * many seconds until the next slot frees. The first version of this importer
+ * ignored that and fired on a timer, which exhausted the budget, turned
+ * every subsequent query into a refusal, and then paid a blind 20-75 second
+ * penalty for each one. It managed two tiles of thirty-six in twenty-six
+ * minutes.
+ *
+ * Asking is both faster and better manners: the server is telling us exactly
+ * when it is ready, and there is no reason to guess instead.
+ */
+async function waitForSlot(mirror: string): Promise<void> {
+  const origin = mirror.replace(/\/api\/interpreter$/, "");
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    const response = await fetch(`${origin}/api/status`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return;
+
+    const text = await response.text();
+    if (/\bslots? available now/i.test(text)) return;
+
+    // "Slot available after: <time>, in 31 seconds." -- possibly several,
+    // one per slot. The soonest is the one worth waiting for.
+    const waits = [...text.matchAll(/in (\d+) seconds/g)].map((m) => Number(m[1]));
+    if (waits.length > 0) {
+      const seconds = Math.min(...waits);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        const ms = Math.min(seconds + 2, 180) * 1000;
+        slotWaitsMs += ms;
+        console.log(`  waiting ${Math.round(ms / 1000)}s for a slot`);
+        await sleep(ms);
+      }
+    }
+  } catch {
+    // The status endpoint is advisory. If it is unreachable, carry on and
+    // let the request itself tell us.
+  }
+}
 
 /** One Overpass request. Null means refused or unreachable, not empty. */
 async function ask(box: Box, mirror: string): Promise<Relation[] | null> {
@@ -126,14 +173,21 @@ function quarter(box: Box): Box[] {
  * fails even at the floor is reported, never silently dropped.
  */
 async function collect(box: Box, span: number): Promise<Relation[]> {
-  for (let attempt = 0; attempt < BACKOFF_MS.length; attempt += 1) {
-    const mirror = MIRRORS[attempt % MIRRORS.length]!;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    // Start each tile on a different mirror, so a single busy server does
+    // not take the first swing at every one of them.
+    const mirror = MIRRORS[(tilesStarted + attempt) % MIRRORS.length]!;
+    await waitForSlot(mirror);
+
     const elements = await ask(box, mirror);
     if (elements !== null) {
       await sleep(POLITE_MS);
       return elements;
     }
-    const pause = BACKOFF_MS[attempt]!;
+
+    // A refusal after the server said it had a slot means it is genuinely
+    // overloaded, so fall back to a plain wait before trying elsewhere.
+    const pause = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]!;
     console.log(`  tile ${box.south},${box.west} refused; waiting ${pause / 1000}s`);
     await sleep(pause);
   }
@@ -151,6 +205,7 @@ async function collect(box: Box, span: number): Promise<Relation[]> {
 }
 
 let failedTiles = 0;
+let tilesStarted = 0;
 
 const R = 6_371_000;
 function metres(a: [number, number], b: [number, number]): number {
@@ -222,6 +277,7 @@ async function main() {
 
   const seen = new Map<number, Relation>();
   for (const [index, tile] of tiles.entries()) {
+    tilesStarted += 1;
     const found = await collect(tile, TILE_DEGREES);
     // Routes straddle tile borders and come back from each; the id dedupes.
     for (const relation of found) seen.set(relation.id, relation);
@@ -346,7 +402,10 @@ export type OsmTrailRow = [
 export const OSM_TRAILS: OsmTrailRow[] = ${JSON.stringify(rows)};
 `,
   );
-  console.log(`Wrote ${rows.length} trails from ${seen.size} relations (${queriesMade} queries).`);
+  console.log(
+    `Wrote ${rows.length} trails from ${seen.size} relations ` +
+      `(${queriesMade} queries, ${Math.round(slotWaitsMs / 1000)}s spent waiting for slots).`,
+  );
   if (failedTiles > 0) console.warn(`${failedTiles} tiles could not be read.`);
 }
 
