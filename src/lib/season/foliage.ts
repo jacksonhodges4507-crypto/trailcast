@@ -14,6 +14,10 @@ import type { Trail } from "../types";
  * labelled as an estimate everywhere it is shown, because a cold snap or a
  * dry August moves it by a week and no forecast knows that in advance.
  *
+ * Null means this place does not do fall colour at all, which is most of
+ * southern Utah: the caller shows nothing rather than a section explaining
+ * the absence.
+ *
  * Deliberately not part of the score. A trail is not safer because the
  * leaves are out, and burying a subjective preference inside a conditions
  * number would make the number mean less.
@@ -32,7 +36,7 @@ const DAYS_PER_1000FT = 4.5;
 /** Either side of peak, leaves are still worth the drive. */
 const SHOULDER_DAYS = 7;
 
-export type FoliageStatus = "too-early" | "turning" | "peak" | "fading" | "past" | "none";
+export type FoliageStatus = "too-early" | "turning" | "peak" | "fading" | "past";
 
 export interface Foliage {
   status: FoliageStatus;
@@ -79,15 +83,11 @@ export function foliageFor(trail: Trail, isoDate: string): Foliage | null {
   const today = dayOfYear(isoDate);
   if (!Number.isFinite(year) || today === 0) return null;
 
-  if (trail.elevationFt < LOWEST_COLOR_FT) {
-    return {
-      status: "none",
-      peak: "",
-      daysToPeak: 0,
-      rating: null,
-      note: `At ${trail.elevationFt.toLocaleString()} ft this is desert and valley country — pretty in its own way, but it doesn't do fall colour.`,
-    };
-  }
+  // Desert and valley floor. There is no aspen or maple show here, so there
+  // is nothing to report -- and a "Fall color" heading that exists only to
+  // say there is no fall color is worse than no heading. Down south it read
+  // as the page not knowing where it was.
+  if (trail.elevationFt < LOWEST_COLOR_FT) return null;
 
   const peakDoy = peakDayOfYear(trail.elevationFt);
   const delta = peakDoy - today;

@@ -11,8 +11,9 @@ import Directions from "./Directions";
 import ClimbRoutes from "./ClimbRoutes";
 import TrailLook from "./TrailLook";
 import HourStrip from "./HourStrip";
-import { accessSentence, dogSentence } from "@/lib/dogs";
+import { accessSentence } from "@/lib/dogs";
 import { foliageFor, isFoliageSeason } from "@/lib/season/foliage";
+import ElevationSplit from "./ElevationSplit";
 import type { SpeciesId } from "@/lib/fishing/species";
 import {
   GRADE_CLASS,
@@ -147,6 +148,8 @@ export default function TrailDetail({
           </div>
         ) : null}
 
+        <ElevationSplit trail={trail} conditions={conditions} />
+
         {conditions.hours && conditions.hours.length > 0 ? (
           <HourStrip
             hours={conditions.hours}
@@ -154,10 +157,6 @@ export default function TrailDetail({
             sunset={conditions.sunsetLocal}
           />
         ) : null}
-
-        <p className="dog-note">
-          <span aria-hidden>{"\u{1F415}"}</span> {dogSentence(trail)}
-        </p>
 
         {verdict.activity !== "climb" ? (
           <p className="dog-note">
