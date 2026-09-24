@@ -6,7 +6,6 @@ import { summitFor } from "@/lib/summit";
 import { quickStats } from "@/lib/format";
 import { parseQuery } from "@/lib/ask/parse";
 import { ask } from "@/lib/ask/answer";
-import { quickStats } from "@/lib/format";
 
 describe("dogs", () => {
   it("bans them in the Salt Lake watershed and allows them one canyon over", () => {

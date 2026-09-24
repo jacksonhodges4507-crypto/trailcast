@@ -86,12 +86,52 @@ describe("a long question still names its place", () => {
   });
 
   it("never answers a named place we don't hold with a generic pick", async () => {
+    // This used to say "dogwood mcfakeface crag". Then the OpenBeta import
+    // landed and TrailCast actually holds a Dogwood Crag, so the example
+    // stopped being an example. The property under test is unchanged.
     const answer = await ask({
-      question: "how is dogwood mcfakeface crag looking on friday",
+      question: "how is zelmerworth crag looking on friday",
       allowLlm: false,
       today: "2026-09-23",
     });
     expect(answer.results).toEqual([]);
     expect(answer.narrative).toMatch(/don't have/i);
+  });
+
+  it("will not build an answer out of the word 'crag' alone", async () => {
+    // The import took the index from 58 places to over 1,500, and the
+    // matcher's generosity stopped being harmless: "crag" prefix-matched
+    // Cragganzenden and Cragganmore, so a question about a place we do not
+    // have came back recommending two places in a different county.
+    const answer = await ask({
+      question: "how is zelmerworth crag looking on friday",
+      allowLlm: false,
+      today: "2026-09-23",
+    });
+    expect(answer.results.map((r) => r.trail.name)).toEqual([]);
+  });
+
+  it("does not confuse a four-letter near miss for a name", async () => {
+    // "fake" is one character from "face", which is how a fake reservoir
+    // used to return a crag called Face to Face.
+    const answer = await ask({
+      question: "whats the fake mcfakeface reservoir",
+      allowLlm: false,
+      today: "2026-09-22",
+    });
+    expect(answer.results).toEqual([]);
+  });
+
+  it("still finds the places it should", async () => {
+    // The guard against the above must not cost real matches.
+    expect(namedPlace("how is dogwood crag looking this time of day on Friday")).toBe(
+      "Dogwood Crag",
+    );
+    const held = await ask({
+      question: "how is dogwood crag looking on friday",
+      allowLlm: false,
+      today: "2026-09-23",
+    });
+    expect(held.results[0]?.trail.name).toBe("Dogwood Crag");
   });
 });

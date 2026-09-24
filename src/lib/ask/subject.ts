@@ -84,17 +84,40 @@ function within(a: string, b: string, cap: number): boolean {
  * Exact beats a prefix beats a typo, so "jordan river" prefers the Jordan
  * River over Jordanelle even though both are reachable from "jordan".
  */
+/**
+ * How well one word of a place's name answers to something in the question.
+ *
+ * Both thresholds here were loosened by the climbing import rather than
+ * chosen: with 58 places a generous match was almost always the right one,
+ * and at 1,500 the same generosity started producing confident wrong
+ * answers. Two specific failures drove the current shape, and the tests
+ * named after them are the reason not to loosen it again.
+ */
 function wordScore(nameWord: string, asked: string[]): number {
   let best = 0;
   for (const word of asked) {
     if (word === nameWord) return 1;
+
+    // A generic word earns nothing beyond an exact match. Asked about a
+    // "crag" we do not have, the matcher used to prefix-match "crag" into
+    // Cragganzenden and Cragganmore and answer with those -- a question
+    // about one place answered with two others, on the strength of a word
+    // that describes half the database.
+    if (GENERIC.has(word)) continue;
+
     if (nameWord.length >= 5 && word.length >= 4 && nameWord.startsWith(word)) {
       best = Math.max(best, 0.8);
     } else if (word.length >= 5 && nameWord.length >= 4 && word.startsWith(nameWord)) {
       best = Math.max(best, 0.8);
     } else {
-      const cap = Math.min(nameWord.length, word.length) >= 6 ? 2 : 1;
-      if (Math.min(nameWord.length, word.length) >= 4 && within(nameWord, word, cap)) {
+      // Edit distance on a short word is a coin toss: fake/face, bear/beat,
+      // rock/lock are each one character apart. "fake mcfakeface reservoir"
+      // used to return a crag called Face to Face on exactly that basis.
+      // Fuzzy matching now needs a word long enough for a near miss to mean
+      // something.
+      const shortest = Math.min(nameWord.length, word.length);
+      const cap = shortest >= 8 ? 2 : 1;
+      if (shortest >= 6 && within(nameWord, word, cap)) {
         best = Math.max(best, 0.6);
       }
     }
@@ -127,7 +150,9 @@ function indexed(): Indexed[] {
   if (!index) {
     index = TRAILS.map((trail) => ({
       trail,
-      words: tokenize(trail.name.replace(/\(reach \d+\)/i, "")),
+      // Distinct words: "Face to Face" has one distinctive word, not two,
+      // and counting it twice was enough to lift a bad match over the bar.
+      words: Array.from(new Set(tokenize(trail.name.replace(/\(reach \d+\)/i, "")))),
     })).filter((entry) => entry.words.length > 0);
   }
   return index;
