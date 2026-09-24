@@ -38,17 +38,30 @@ const ELEVATION = "https://api.open-meteo.com/v1/elevation";
 /** Utah, with a little margin. */
 const STATE = { south: 36.98, west: -114.07, north: 42.02, east: -109.03 };
 
-/** A tile this wide is one Overpass query. Dense ones get quartered. */
-const TILE_DEGREES = 1;
+/**
+ * A tile this wide is one Overpass query; ones that fail get quartered.
+ *
+ * Two degrees, because listing is tags-only and cheap: a 2-degree box over
+ * the Uintas answers in twenty seconds with 120 routes. That is nine
+ * requests for the state instead of thirty-six, and when the server is busy
+ * enough to refuse one, the split turns it back into the 1-degree boxes that
+ * are known to work. Start optimistic, degrade on evidence.
+ */
+const TILE_DEGREES = 2;
 /** Stop splitting here; below this a tile is smaller than a trailhead. */
 const MIN_TILE_DEGREES = 0.125;
 
 /** A courtesy pause between queries, on top of the slot wait below. */
 const POLITE_MS = 1_500;
-/** Fallback waits, only for a mirror that publishes no slot status. */
-const BACKOFF_MS = [15_000, 30_000, 60_000];
-/** How many times a tile is retried before it is split. */
-const ATTEMPTS = 4;
+/**
+ * Waits after a refusal. Short, because a refusal here is transient load
+ * shedding rather than a rate limit -- the slot check above already handles
+ * the rate limit, and sitting out a minute for a server that will answer in
+ * ten seconds was most of why the first attempt could not finish.
+ */
+const BACKOFF_MS = [10_000, 25_000, 45_000];
+/** How many times a request is retried before the caller gives up on it. */
+const ATTEMPTS = 3;
 
 /** Relations per geometry request. Small, so one monster is cheap to isolate. */
 const GEOMETRY_BATCH = 8;
