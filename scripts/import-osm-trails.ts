@@ -4,20 +4,31 @@
  *   npx tsx scripts/import-osm-trails.ts
  *
  * Utah's named trail routes -- the curated multi-way relations that people
- * actually name and search for -- plus their length and elevation profile.
+ * actually name and search for -- with their real length and elevation gain
+ * measured from geometry rather than guessed.
  *
  * Why OSM and not a search engine: OSM's geometry is openly licensed and
- * redistributable, so the length, the trailhead and the shape are all facts
- * we can carry rather than numbers we would be inventing. A search engine's
- * trail descriptions are neither.
+ * redistributable, so the length, the trailhead and the shape are facts we
+ * can carry. A search engine's trail descriptions are not.
  *
- * This runs in CI (see .github/workflows/refresh-trails.yml) rather than on a
- * laptop: Overpass refuses cloud IP ranges often enough to be unusable from a
- * deploy target, and the elevation pass is a few hundred more requests.
+ * Why this runs in CI: Overpass refuses cloud IP ranges, and the dev sandbox
+ * has no route to it at all.
+ *
+ * Three things were learned the expensive way and are now load-bearing:
+ *
+ *   1. `[route~"^(hiking|foot|mtb)$"]` forces a full scan and times out. A
+ *      union of exact `["route"="hiking"]` matches uses the tag index and
+ *      returns the same rows in about two seconds.
+ *   2. Utah in one query is too much for a public endpoint no matter how the
+ *      filter is written. The state is walked as tiles.
+ *   3. A 504 from Overpass usually means "busy", not "wrong". Every failure
+ *      here is retried with a real backoff before the tile is split, because
+ *      the first version treated a busy server as an empty state and wrote
+ *      down that Utah has no trails.
  */
 import { writeFileSync } from "node:fs";
 
-const OVERPASS = [
+const MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
@@ -25,39 +36,121 @@ const OVERPASS = [
 const ELEVATION = "https://api.open-meteo.com/v1/elevation";
 
 /** Utah, with a little margin. */
-const BBOX = "36.98,-114.07,42.02,-109.03";
+const STATE = { south: 36.98, west: -114.07, north: 42.02, east: -109.03 };
+
+/** A tile this wide is one Overpass query. Dense ones get quartered. */
+const TILE_DEGREES = 1;
+/** Stop splitting here; below this a tile is smaller than a trailhead. */
+const MIN_TILE_DEGREES = 0.125;
+
+/** Between successful queries. Overpass allows two slots; this stays under. */
+const POLITE_MS = 8_000;
+/** After a refusal, in order. */
+const BACKOFF_MS = [20_000, 45_000, 75_000];
 
 const MIN_MI = 0.4;
 const MAX_MI = 60;
 
+interface Member {
+  type?: string;
+  geometry?: { lat: number; lon: number }[];
+}
 interface Relation {
   id: number;
   tags?: Record<string, string>;
-  center?: { lat: number; lon: number };
-  members?: { type?: string; geometry?: { lat: number; lon: number }[] }[];
+  members?: Member[];
+}
+interface Box {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
 }
 
-async function overpass(query: string, timeoutMs = 90_000): Promise<{ elements?: Relation[] } | null> {
-  for (const host of OVERPASS) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(host, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-      });
-      if (!response.ok) continue;
-      return (await response.json()) as { elements?: Relation[] };
-    } catch {
-      // Try the next mirror.
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  return null;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function query(box: Box): string {
+  const b = `${box.south},${box.west},${box.north},${box.east}`;
+  // Exact matches, not a regex: see note 1 at the top of this file.
+  const clauses = ["hiking", "foot", "mtb", "bicycle"]
+    .map((route) => `relation(${b})["route"="${route}"]["name"];`)
+    .join("");
+  return `[out:json][timeout:180];(${clauses});out geom tags;`;
 }
+
+let queriesMade = 0;
+
+/** One Overpass request. Null means refused or unreachable, not empty. */
+async function ask(box: Box, mirror: string): Promise<Relation[] | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await fetch(mirror, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        // Overpass asks that automated clients identify themselves.
+        "user-agent": "trailcast-importer (github.com/jacksonhodges4507-crypto/trailcast)",
+      },
+      body: `data=${encodeURIComponent(query(box))}`,
+    });
+    queriesMade += 1;
+    if (!response.ok) return null;
+    const body = (await response.json()) as { elements?: Relation[] };
+    return body.elements ?? [];
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function quarter(box: Box): Box[] {
+  const midLat = (box.south + box.north) / 2;
+  const midLon = (box.west + box.east) / 2;
+  return [
+    { south: box.south, west: box.west, north: midLat, east: midLon },
+    { south: box.south, west: midLon, north: midLat, east: box.east },
+    { south: midLat, west: box.west, north: box.north, east: midLon },
+    { south: midLat, west: midLon, north: box.north, east: box.east },
+  ];
+}
+
+/**
+ * Every route relation in a tile, retrying before splitting.
+ *
+ * A refusal is retried against each mirror with a growing pause. Only when a
+ * tile has genuinely failed every attempt is it quartered, on the theory that
+ * it might be too dense rather than the server too busy -- and a tile that
+ * fails even at the floor is reported, never silently dropped.
+ */
+async function collect(box: Box, span: number): Promise<Relation[]> {
+  for (let attempt = 0; attempt < BACKOFF_MS.length; attempt += 1) {
+    const mirror = MIRRORS[attempt % MIRRORS.length]!;
+    const elements = await ask(box, mirror);
+    if (elements !== null) {
+      await sleep(POLITE_MS);
+      return elements;
+    }
+    const pause = BACKOFF_MS[attempt]!;
+    console.log(`  tile ${box.south},${box.west} refused; waiting ${pause / 1000}s`);
+    await sleep(pause);
+  }
+
+  if (span / 2 < MIN_TILE_DEGREES) {
+    console.warn(`  !! giving up on tile ${box.south},${box.west} (${span}deg)`);
+    failedTiles += 1;
+    return [];
+  }
+
+  console.log(`  splitting tile ${box.south},${box.west}`);
+  const out: Relation[] = [];
+  for (const sub of quarter(box)) out.push(...(await collect(sub, span / 2)));
+  return out;
+}
+
+let failedTiles = 0;
 
 const R = 6_371_000;
 function metres(a: [number, number], b: [number, number]): number {
@@ -100,7 +193,6 @@ const SURFACE: Record<string, string> = {
   asphalt: "p", paved: "p", concrete: "p",
 };
 
-/** Elevations for up to 100 points at a time, or nulls if the service is out. */
 async function elevations(points: [number, number][]): Promise<(number | null)[]> {
   const lat = points.map((p) => p[1].toFixed(4)).join(",");
   const lon = points.map((p) => p[0].toFixed(4)).join(",");
@@ -115,28 +207,33 @@ async function elevations(points: [number, number][]): Promise<(number | null)[]
 }
 
 async function main() {
-  console.log("Asking Overpass for Utah's named trail routes…");
-  const listed = await overpass(
-    `[out:json][timeout:180];relation(${BBOX})[route~"^(hiking|foot|mtb|bicycle)$"][name];out tags center;`,
-    180_000,
-  );
-  const all = listed?.elements ?? [];
-  if (all.length === 0) throw new Error("Overpass returned no routes");
+  const tiles: Box[] = [];
+  for (let lat = STATE.south; lat < STATE.north; lat += TILE_DEGREES) {
+    for (let lon = STATE.west; lon < STATE.east; lon += TILE_DEGREES) {
+      tiles.push({
+        south: Math.round(lat * 1e4) / 1e4,
+        west: Math.round(lon * 1e4) / 1e4,
+        north: Math.round(Math.min(lat + TILE_DEGREES, STATE.north) * 1e4) / 1e4,
+        east: Math.round(Math.min(lon + TILE_DEGREES, STATE.east) * 1e4) / 1e4,
+      });
+    }
+  }
+  console.log(`Walking Utah as ${tiles.length} tiles…`);
 
-  // Utah only, real names, and no on-road bike routes dressed as trails.
-  const inUtah = (c?: { lat: number; lon: number }) =>
-    c !== undefined && c.lat > 36.99 && c.lat < 42.01 && c.lon > -114.06 && c.lon < -109.04;
-  const trailish = (name: string) => /\b(trail|parkway|path|greenway|loop|rail|route)\b/i.test(name);
+  const seen = new Map<number, Relation>();
+  for (const [index, tile] of tiles.entries()) {
+    const found = await collect(tile, TILE_DEGREES);
+    // Routes straddle tile borders and come back from each; the id dedupes.
+    for (const relation of found) seen.set(relation.id, relation);
+    console.log(`tile ${index + 1}/${tiles.length} → ${found.length} here, ${seen.size} total`);
+  }
 
-  const wanted = all.filter((r) => {
-    const name = clean(r.tags?.["name"] ?? "");
-    if (!name || name.length > 60) return false;
-    if (!inUtah(r.center)) return false;
-    if (/^(US|UT|SR)[- ]?\d/i.test(name)) return false;
-    if (r.tags?.["route"] === "bicycle" && !trailish(name)) return false;
-    return true;
-  });
-  console.log(`${wanted.length} routes to measure, of ${all.length} returned.`);
+  if (seen.size === 0) {
+    throw new Error(
+      `Overpass returned nothing across ${tiles.length} tiles and ${queriesMade} queries. ` +
+        "Refusing to overwrite the snapshot with an empty one.",
+    );
+  }
 
   interface Built {
     id: number;
@@ -151,52 +248,51 @@ async function main() {
     samples: [number, number][];
   }
   const built: Built[] = [];
+  const trailish = /\b(trail|parkway|path|greenway|loop|rail|route|traverse)\b/i;
 
-  // Geometry a few at a time: a super-relation with `out geom` can be
-  // enormous, and one timeout should cost three routes rather than all of
-  // them.
-  for (let i = 0; i < wanted.length; i += 3) {
-    const batch = wanted.slice(i, i + 3);
-    const body = await overpass(
-      `[out:json][timeout:60];relation(id:${batch.map((r) => r.id).join(",")});out geom tags;`,
-      70_000,
-    );
-    for (const relation of body?.elements ?? []) {
-      const segments = (relation.members ?? [])
-        .filter((m) => m.type === "way" && m.geometry && m.geometry.length > 1)
-        .map((m) => m.geometry!.map((g) => [g.lon, g.lat] as [number, number]));
-      if (segments.length === 0) continue;
+  for (const relation of seen.values()) {
+    const tags = relation.tags ?? {};
+    const name = clean(tags["name"] ?? "");
+    if (!name || name.length > 60) continue;
+    if (/^(US|UT|SR|I)[- ]?\d/i.test(name)) continue;
+    if (tags["route"] === "bicycle" && !trailish.test(name)) continue;
 
-      let length = 0;
-      for (const segment of segments) {
-        for (let k = 1; k < segment.length; k += 1) length += metres(segment[k - 1]!, segment[k]!);
-      }
-      const miles = length / 1609.34;
-      if (miles < MIN_MI || miles > MAX_MI) continue;
+    const segments = (relation.members ?? [])
+      .filter((m) => m.type === "way" && m.geometry && m.geometry.length > 1)
+      .map((m) => m.geometry!.map((g) => [g.lon, g.lat] as [number, number]));
+    if (segments.length === 0) continue;
 
-      const flat = segments.flat();
-      const count = Math.min(14, Math.max(4, Math.round(length / 600)));
-      const samples: [number, number][] = [];
-      for (let k = 0; k < count; k += 1) {
-        samples.push(flat[Math.floor((k * (flat.length - 1)) / (count - 1))]!);
-      }
-
-      const tags = relation.tags ?? {};
-      built.push({
-        id: relation.id,
-        name: clean(tags["name"] ?? "").slice(0, 48),
-        mask: activityMask(tags),
-        lat: Math.round(flat[0]![1] * 1e4) / 1e4,
-        lon: Math.round(flat[0]![0] * 1e4) / 1e4,
-        miles: Math.round(miles * 10) / 10,
-        gainFt: 0,
-        elevationFt: 0,
-        surface: SURFACE[tags["surface"] ?? ""] ?? "d",
-        samples,
-      });
+    let length = 0;
+    for (const segment of segments) {
+      for (let k = 1; k < segment.length; k += 1) length += metres(segment[k - 1]!, segment[k]!);
     }
-    if (i % 60 === 0) console.log(`${i}/${wanted.length} measured, ${built.length} kept`);
-    await new Promise((r) => setTimeout(r, 900));
+    const miles = length / 1609.34;
+    if (miles < MIN_MI || miles > MAX_MI) continue;
+
+    const flat = segments.flat();
+    const start = flat[0]!;
+    // Tiles overlap the state border; keep only what is actually in Utah.
+    if (start[1] < STATE.south || start[1] > STATE.north) continue;
+    if (start[0] < STATE.west || start[0] > STATE.east) continue;
+
+    const count = Math.min(14, Math.max(4, Math.round(length / 600)));
+    const samples: [number, number][] = [];
+    for (let k = 0; k < count; k += 1) {
+      samples.push(flat[Math.floor((k * (flat.length - 1)) / (count - 1))]!);
+    }
+
+    built.push({
+      id: relation.id,
+      name: name.slice(0, 48),
+      mask: activityMask(tags),
+      lat: Math.round(start[1] * 1e4) / 1e4,
+      lon: Math.round(start[0] * 1e4) / 1e4,
+      miles: Math.round(miles * 10) / 10,
+      gainFt: 0,
+      elevationFt: 0,
+      surface: SURFACE[tags["surface"] ?? ""] ?? "d",
+      samples,
+    });
   }
 
   console.log(`Sampling elevation for ${built.length} routes…`);
@@ -214,10 +310,10 @@ async function main() {
     }
     route.elevationFt = Math.round((known[0] ?? 0) * 3.28084);
     route.gainFt = Math.round(gain * 3.28084);
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250);
   }
 
-  built.sort((a, b) => b.miles - a.miles);
+  built.sort((a, b) => a.name.localeCompare(b.name));
 
   const rows = built.map((b) => [
     `r${b.id}`,
@@ -250,7 +346,8 @@ export type OsmTrailRow = [
 export const OSM_TRAILS: OsmTrailRow[] = ${JSON.stringify(rows)};
 `,
   );
-  console.log(`Wrote ${rows.length} trails.`);
+  console.log(`Wrote ${rows.length} trails from ${seen.size} relations (${queriesMade} queries).`);
+  if (failedTiles > 0) console.warn(`${failedTiles} tiles could not be read.`);
 }
 
 void main();
