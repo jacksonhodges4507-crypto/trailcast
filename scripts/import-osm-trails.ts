@@ -238,6 +238,12 @@ async function main() {
   if (relations.length === 0) {
     throw new Error("The extract holds no relations. The osmium filter produced nothing.");
   }
+  if (ways.size === 0) {
+    throw new Error(
+      `The extract holds ${relations.length} relations but no ways, so nothing has geometry. ` +
+        "osmium needs -R (--add-referenced) and it must come BEFORE the input file.",
+    );
+  }
 
   const built: Built[] = [];
   let throughRoutes = 0;
