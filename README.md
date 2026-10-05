@@ -70,7 +70,7 @@ registry array. Nothing downstream changes.
 
 ---
 
-## Five decisions worth defending
+## Seven decisions worth defending
 
 **1. Missing data lowers confidence, not the score.**
 Scoring an absent input as zero turns an upstream outage into bad advice. If the
@@ -95,14 +95,14 @@ with its real reading — `44–62 °F`, `AQI 39`, `31 h dry` — followed by a
 five-step rating, and weight is expressed by the ordering instead of ink.
 → [`TrailDetail.tsx`](src/app/components/TrailDetail.tsx)
 
-**3. Every number is traceable.**
+**4. Every number is traceable.**
 A `SourceRef` — source, URL, upstream field, fetch timestamp — is attached at
 the moment a value is parsed and carried through assembly, scoring and into the
 UI. Open the detail panel and every factor links back to the exact request that
 produced it. This is the feature that makes the tool trustworthy enough to act
 on. → [`types.ts`](src/lib/types.ts)
 
-**4. A percentage has to be a percentage.**
+**5. A percentage has to be a percentage.**
 Auditing every number that reaches a user split them cleanly. Precipitation
 chance (`45% chance`) is a real probability; a factor's share of the weighted
 sum (`counts for 16%`) is a real share; sandstone losing `75%` of its strength
@@ -114,12 +114,12 @@ missing ones. On the trail cards it appears only when something is actually
 missing, since a figure that reads 100% on every card is noise everywhere
 except the one place it matters.
 
-**4. One dead source never blanks the page.**
+**6. One dead source never blanks the page.**
 Sources are fetched in parallel and settled independently; each has its own TTL
 and a stale-while-revalidate window. The header shows live per-source health —
 latency, cache age, or the error string. → [`sources/index.ts`](src/lib/sources/index.ts)
 
-**5. The AI layer is optional, and the deterministic path is the reference
+**7. The AI layer is optional, and the deterministic path is the reference
 implementation.**
 `/api/ask` parses questions with regex rules and narrates results from a
 template. When `ANTHROPIC_API_KEY` is set, a model improves both steps — but it
