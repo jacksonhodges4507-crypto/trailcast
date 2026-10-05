@@ -59,7 +59,10 @@ jobs:
 
           # Counts, so a filter that quietly drops members says so here rather
           # than three steps later.
-          osmium fileinfo -e routes.osm.pbf | grep -A6 "Object counts"
+          # Never fatal: this is here to be read, not to gate the run. The
+          # grep form exited 1 when it matched nothing and failed the step
+          # even though the filter above had just worked.
+          osmium fileinfo -e routes.osm.pbf || true
 
       - name: Build the snapshot
         run: npx tsx scripts/import-osm-trails.ts routes.osm
