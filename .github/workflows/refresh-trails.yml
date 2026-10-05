@@ -48,22 +48,32 @@ jobs:
 
       - name: Reduce it to route relations
         run: |
-          # Options BEFORE the input file. With "-R -o out" written after the
-          # filter expressions the flag never takes effect: the run produced 418
-          # relations and zero ways, which is relations with no geometry and no
-          # use at all. -R is what pulls in the member ways and their nodes.
-          osmium tags-filter -R -o routes.osm.pbf \
+          # Two explicit passes, because tags-filter's -R did not add the
+          # referenced members here: it reported success and wrote 418
+          # relations with zero ways and zero nodes between them, twice,
+          # with the flag before the input file and after it.
+          #
+          # Pass 1 selects the relations. Pass 2 uses getid to pull those
+          # relations plus every way and node they reference. Each pass is
+          # checked, so whichever one is wrong says so by name.
+          osmium tags-filter -o rel.osm.pbf \
             utah.osm.pbf r/route=hiking,foot,mtb,bicycle
+          osmium getid --add-referenced --id-osm-file rel.osm.pbf \
+            -o routes.osm.pbf utah.osm.pbf
           osmium cat -f osm -o routes.osm routes.osm.pbf
-          ls -lh routes.osm.pbf routes.osm
+          ls -lh rel.osm.pbf routes.osm.pbf routes.osm
 
-          # Counts, so a filter that quietly drops members says so here rather
-          # than three steps later.
-          # Never fatal: this is here to be read, not to gate the run. The
-          # grep form exited 1 when it matched nothing and failed the step
-          # even though the filter above had just worked.
+          # Counts, read rather than guessed. Never fatal on its own.
           osmium fileinfo -e routes.osm.pbf || true
 
+          # A route relation with no ways has no geometry, which is the
+          # failure that cost two runs. Stop here, not three steps later.
+          WAYS=$(osmium fileinfo -e -g data.count.ways routes.osm.pbf)
+          echo "ways: $WAYS"
+          if [ "$WAYS" -lt 1 ]; then
+            echo "No ways in the extract: the relations carry no geometry."
+            exit 1
+          fi
       - name: Build the snapshot
         run: npx tsx scripts/import-osm-trails.ts routes.osm
 
