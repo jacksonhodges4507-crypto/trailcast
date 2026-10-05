@@ -56,7 +56,9 @@ jobs:
           run_osmium() {
             local label="$1"; shift
             if ! "$@" > /tmp/out.txt 2> /tmp/err.txt; then
-              say "$label failed: $(tr '\n' ' ' < /tmp/err.txt | cut -c1-500)"
+              # Both streams: the first attempt reported an empty error
+              # because osmium had written its complaint to stdout.
+              say "$label failed: $(cat /tmp/err.txt /tmp/out.txt | tr '\n' ' ' | cut -c1-600)"
               exit 1
             fi
             cat /tmp/out.txt
