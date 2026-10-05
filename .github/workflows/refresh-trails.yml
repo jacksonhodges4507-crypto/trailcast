@@ -48,13 +48,18 @@ jobs:
 
       - name: Reduce it to route relations
         run: |
-          # -R pulls in the ways and nodes those relations reference, which is
-          # what turns a list of relations into something with geometry.
-          osmium tags-filter utah.osm.pbf \
-            r/route=hiking r/route=foot r/route=mtb r/route=bicycle \
-            -R -o routes.osm.pbf
-          osmium cat routes.osm.pbf -f osm -o routes.osm
+          # Options BEFORE the input file. With "-R -o out" written after the
+          # filter expressions the flag never takes effect: the run produced 418
+          # relations and zero ways, which is relations with no geometry and no
+          # use at all. -R is what pulls in the member ways and their nodes.
+          osmium tags-filter -R -o routes.osm.pbf \
+            utah.osm.pbf r/route=hiking,foot,mtb,bicycle
+          osmium cat -f osm -o routes.osm routes.osm.pbf
           ls -lh routes.osm.pbf routes.osm
+
+          # Counts, so a filter that quietly drops members says so here rather
+          # than three steps later.
+          osmium fileinfo -e routes.osm.pbf | grep -A6 "Object counts"
 
       - name: Build the snapshot
         run: npx tsx scripts/import-osm-trails.ts routes.osm
